@@ -1,0 +1,7 @@
+# Gene Cartoon Studio -- dependencies
+# Streamlit Community Cloud installs these automatically on deploy.
+streamlit>=1.31
+matplotlib>=3.6
+requests>=2.28
+pandas>=1.5
+openpyxl>=3.1
