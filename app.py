@@ -14,12 +14,14 @@ from __future__ import annotations
 
 import io
 import json
+import re
 import traceback
 from dataclasses import asdict, fields
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 import ucsc_gene_cartoon as ugc
 from ucsc_gene_cartoon import (
@@ -35,7 +37,7 @@ except ImportError:                                    # pragma: no cover
     HAVE_TABLES = False
 
 #: this app needs at least this version of ucsc_gene_cartoon.py
-ENGINE_MIN = (1, 2, 0)
+ENGINE_MIN = (1, 3, 0)
 
 ASSEMBLIES = ["hg38", "hg19", "mm39", "mm10", "rn7", "danRer11",
               "dm6", "ce11", "sacCer3", "galGal6", "susScr11", "bosTau9"]
@@ -91,13 +93,148 @@ def available_tracks(genome: str) -> List[str]:
 #  Helpers
 # --------------------------------------------------------------------------- #
 
-def show_figure(cartoon: GeneCartoon) -> None:
+def show_figure(cartoon: GeneCartoon, interactive: bool = True) -> None:
     """Preview the cartoon, scaled to the page."""
+    if interactive and cartoon.variants:
+        try:
+            show_interactive(cartoon)
+            return
+        except Exception:                              # pragma: no cover
+            st.caption("Interactive view unavailable; showing a static image.")
     png = cartoon.to_bytes("png")
     try:
         st.image(png, use_container_width=True)
     except TypeError:                                  # older Streamlit
         st.image(png, use_column_width=True)
+
+
+def show_interactive(cartoon: GeneCartoon) -> None:
+    """
+    Render the figure as live SVG with hover tooltips and click-to-pin.
+
+    This is the *same* SVG offered for download -- the markers simply carry
+    ids, and a little JavaScript attaches behaviour to them. Nothing about the
+    published figure changes.
+    """
+    svg = cartoon.to_svg()
+    svg = svg[svg.index("<svg"):]
+
+    m = re.search(r'viewBox="0 0 ([\d.]+) ([\d.]+)"', svg)
+    aspect = (float(m.group(2)) / float(m.group(1))) if m else 0.4
+    # make it fluid inside the iframe
+    svg = re.sub(r'(<svg[^>]*?)\s+width="[\d.]+pt"\s+height="[\d.]+pt"',
+                 r'\1 width="100%"', svg, count=1)
+
+    tips = {t["gid"]: t for t in cartoon.variant_tooltips()}
+    width_px = 1150
+    height = int(width_px * aspect) + 190
+
+    html = _INTERACTIVE_HTML.replace("__SVG__", svg).replace(
+        "__DATA__", json.dumps(tips))
+    components.html(html, height=height, scrolling=False)
+
+
+_INTERACTIVE_HTML = """
+<style>
+  body { margin:0; font-family: -apple-system, "Segoe UI", Roboto, sans-serif; }
+  #fig { position:relative; width:100%; }
+  #fig svg { width:100%; height:auto; display:block; }
+  g[id^="variant-"] { cursor:pointer; }
+  g[id^="variant-"] use { transition: stroke-width .08s ease; }
+  g[id^="variant-"].hot use,
+  g[id^="variant-"].pinned use { stroke:#111 !important; stroke-width:1.6 !important; }
+  #tip {
+    position:fixed; display:none; z-index:9999; pointer-events:none;
+    background:#1f2933; color:#fff; padding:7px 10px; border-radius:6px;
+    font-size:12px; line-height:1.45; max-width:280px;
+    box-shadow:0 4px 14px rgba(0,0,0,.28);
+  }
+  #tip b { font-size:13px; }
+  #tip .sub { color:#c3ccd6; }
+  #pins { margin:10px 2px 0; font-size:13px; color:#31333F; }
+  #pins .hdr { color:#6b7480; margin-bottom:6px; }
+  .chip {
+    display:inline-flex; align-items:center; gap:6px; cursor:pointer;
+    border:1px solid #d7dbe0; border-radius:14px; padding:3px 10px;
+    margin:0 6px 6px 0; background:#fff;
+  }
+  .chip:hover { background:#f4f6f8; }
+  .dot { width:9px; height:9px; border-radius:50%; display:inline-block; }
+  .x { color:#98a2ad; font-weight:700; }
+</style>
+
+<div id="fig">__SVG__</div>
+<div id="tip"></div>
+<div id="pins"></div>
+
+<script>
+const DATA = __DATA__;
+const tip  = document.getElementById('tip');
+const pins = document.getElementById('pins');
+const pinned = new Set();
+
+function rowsFor(d) {
+  const bits = [];
+  if (d.cdna && d.cdna !== d.label) bits.push(d.cdna);
+  if (d.category) bits.push(d.category);
+  const loc = [d.exon, d.codon].filter(Boolean).join(' &middot; ');
+  let html = '<b>' + d.label + '</b>';
+  if (bits.length) html += '<br><span class="sub">' + bits.join('<br>') + '</span>';
+  if (loc)      html += '<br><span class="sub">' + loc + '</span>';
+  if (d.position) html += '<br><span class="sub">' + d.position + '</span>';
+  if (d.count > 1) html += '<br><span class="sub">seen ' + d.count + '&times;</span>';
+  if (d.note)   html += '<br><span class="sub">' + d.note + '</span>';
+  return html;
+}
+
+function renderPins() {
+  if (!pinned.size) { pins.innerHTML = ''; return; }
+  let h = '<div class="hdr">Pinned (click a chip to remove)</div>';
+  pinned.forEach(gid => {
+    const d = DATA[gid];
+    h += '<span class="chip" data-gid="' + gid + '">'
+       + '<span class="dot" style="background:' + d.color + '"></span>'
+       + d.label + (d.category ? ' <span class="sub">' + d.category + '</span>' : '')
+       + ' <span class="x">&times;</span></span>';
+  });
+  pins.innerHTML = h;
+  pins.querySelectorAll('.chip').forEach(ch => {
+    ch.onclick = () => { toggle(ch.dataset.gid); };
+  });
+}
+
+function toggle(gid) {
+  const el = document.getElementById(gid);
+  if (pinned.has(gid)) { pinned.delete(gid); el && el.classList.remove('pinned'); }
+  else { pinned.add(gid); el && el.classList.add('pinned'); }
+  renderPins();
+}
+
+document.querySelectorAll('g[id^="variant-"]').forEach(el => {
+  const d = DATA[el.id];
+  if (!d) return;
+  el.addEventListener('mouseenter', e => {
+    el.classList.add('hot');
+    tip.innerHTML = rowsFor(d);
+    tip.style.display = 'block';
+  });
+  el.addEventListener('mousemove', e => {
+    const pad = 14;
+    let x = e.clientX + pad, y = e.clientY + pad;
+    const r = tip.getBoundingClientRect();
+    if (x + r.width  > window.innerWidth)  x = e.clientX - r.width  - pad;
+    if (y + r.height > window.innerHeight) y = e.clientY - r.height - pad;
+    tip.style.left = x + 'px';
+    tip.style.top  = y + 'px';
+  });
+  el.addEventListener('mouseleave', () => {
+    el.classList.remove('hot');
+    tip.style.display = 'none';
+  });
+  el.addEventListener('click', () => toggle(el.id));
+});
+</script>
+"""
 
 
 def style_from_state() -> Style:
@@ -211,7 +348,7 @@ Both are in the same folder, so the file simply hasn't been replaced yet.
 repository and look at about line 30. The current version has:
 
 ```python
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 ```
 
 If that line isn't there, the upload didn't land. Common reasons:
@@ -351,10 +488,15 @@ def main() -> None:
 
         with st.expander("Variants"):
             st.selectbox(
-                "Display", ["stacked", "lollipop"], key="sty_variant_style",
-                help="stacked = markers sit directly above their position and "
-                     "pile up, with no connecting lines. lollipop = classic "
-                     "stems.")
+                "Display", ["stacked", "lanes", "lollipop"],
+                key="sty_variant_style",
+                help="stacked = markers pile up above their position. "
+                     "lanes = one labelled row per category, so mutation "
+                     "types can be compared along the gene. "
+                     "lollipop = classic stems.")
+            st.slider("Gap between lanes", 0.0, 0.8, key="sty_lane_gap",
+                      value=0.16, step=0.02,
+                      help="Only used by the 'lanes' display.")
             st.selectbox("Marker", ["o", "s", "D", "v", "^"],
                          key="sty_variant_marker",
                          format_func=lambda m: {"o": "circle", "s": "square",
@@ -476,7 +618,13 @@ def main() -> None:
         cartoon = GeneCartoon(drawn, style, gene, genome, used_track,
                               annotations=annotations, links=links,
                               variants=variant_objs)
-        show_figure(cartoon)
+        if variant_objs:
+            interactive = st.checkbox(
+                "Interactive figure — hover a variant for details, click to pin",
+                value=True, key="interactive_preview")
+        else:
+            interactive = False
+        show_figure(cartoon, interactive=interactive)
     except Exception as e:                             # pragma: no cover
         st.error(f"Could not draw the figure: {e}")
         st.code(traceback.format_exc())

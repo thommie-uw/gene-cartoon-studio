@@ -27,7 +27,7 @@ from __future__ import annotations
 #: Bumped whenever app.py relies on something new in here.  app.py checks it
 #: and refuses to run against a stale copy, because a half-updated pair of
 #: files fails silently and confusingly (controls appear but do nothing).
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 
 import argparse
 import bisect
@@ -698,8 +698,14 @@ class Style:
     # ---- variants ----
     #: "stacked"  -- markers sit directly above their position and pile up
     #:              vertically, label alongside each marker.  No stems.
+    #: "lanes"    -- one labelled row per category, so mutation types can be
+    #:              compared along the gene instead of being intermixed.
     #: "lollipop" -- classic stems, with heads nudged sideways when crowded.
     variant_style: str = "stacked"
+    lane_gap: float = 0.16                 # extra space between category lanes
+    lane_label_size: float = 7.5
+    lane_rule: bool = True                 # faint baseline under each lane
+    lane_rule_color: str = "#E4E4E4"
     variant_marker: str = "o"              # o | s | D | v | ^
     variant_head_size: float = 42.0        # area in pt^2 of a single-count head
     variant_head_edge: str = "#FFFFFF"
@@ -875,6 +881,9 @@ class GeneCartoon:
         self.links = links or {}
         self.variants = [v for v in (variants or []) if v.placed]
         self._variant_colors: Dict[str, str] = self._assign_variant_colors()
+        self._lane_rows: List[Tuple[str, int, int]] = []
+        self._gids: Dict[int, int] = {id(v): i
+                                      for i, v in enumerate(self.variants)}
         self.strand = self.tx[0].strand
         self.flip = style.orient_five_prime_left and self.strand == "-"
         self.map = CoordinateMapper(self.tx, style, flip=self.flip)
@@ -933,6 +942,34 @@ class GeneCartoon:
                 out[cat] = v.color
         return out
 
+    def _gid_of(self, v: Variant) -> int:
+        return self._gids.get(id(v), 0)
+
+    def variant_tooltips(self) -> List[Dict[str, Any]]:
+        """
+        One record per drawn variant, keyed by the SVG element id.
+
+        The app uses this to attach hover text and click-to-pin behaviour to
+        the very same SVG it offers for download -- no second renderer, so
+        what you interact with is exactly what you publish.
+        """
+        chrom = self.tx[0].chrom
+        out = []
+        for i, v in enumerate(self.variants):
+            out.append({
+                "gid": f"variant-{i}",
+                "label": str(v.label or v.cdna or "variant"),
+                "cdna": str(v.cdna or ""),
+                "category": str(v.category or ""),
+                "count": int(v.count or 1),
+                "position": f"{chrom}:{v.genomic:,}" if v.genomic else "",
+                "exon": "" if v.exon is None else f"exon {v.exon}",
+                "codon": "" if v.protein is None else f"codon {v.protein}",
+                "note": str(v.note or ""),
+                "color": self.variant_color(v),
+            })
+        return out
+
     def variant_color(self, v: Variant) -> str:
         if v.color:
             return v.color
@@ -959,15 +996,16 @@ class GeneCartoon:
 
         head_w = (math.sqrt(st.variant_head_size) / 72.0) * self._x_per_in * 1.25
 
-        if st.variant_style == "stacked":
-            # Markers stay on their true position and pile upwards.  A tier is
-            # reusable once its previous occupant's marker *and label* have
-            # ended, so distant variants share the bottom row.
-            show_lbl = (st.show_variant_labels
-                        and len(items) <= st.variant_label_max)
+        show_lbl = (st.show_variant_labels
+                    and len(items) <= st.variant_label_max)
+
+        def pack(members: Sequence[Tuple[Variant, float]]
+                 ) -> List[Tuple[Variant, float, int]]:
+            """Greedy row packing: a row is free once the previous marker
+            (and its label) has ended."""
             ends: List[float] = []
             out = []
-            for v, x in items:
+            for v, x in members:
                 right = head_w / 2
                 if show_lbl and v.label:
                     right += st.variant_label_gap + self._text_width(
@@ -980,7 +1018,30 @@ class GeneCartoon:
                     ends.append(x + right)
                 else:
                     ends[tier] = x + right
-                out.append((v, x, x, tier))
+                out.append((v, x, tier))
+            return out
+
+        if st.variant_style == "stacked":
+            # Markers stay on their true position and pile upwards.
+            return [(v, x, x, tier) for v, x, tier in pack(items)]
+
+        if st.variant_style == "lanes":
+            # One row per category, in the same order as the legend, with the
+            # busiest lane nearest the gene.  Lanes pack internally, so a
+            # crowded type gets the height it needs without pushing the others.
+            order = [c for c in self._variant_colors]
+            self._lane_rows = []
+            out, base = [], 0
+            for cat in order:
+                members = [(v, x) for v, x in items if (v.category or "") == cat]
+                if not members:
+                    continue
+                packed = pack(members)
+                n_sub = max(tier for _, _, tier in packed) + 1
+                for v, x, tier in packed:
+                    out.append((v, x, x, base + tier))
+                self._lane_rows.append((cat, base, n_sub))
+                base += n_sub
             return out
 
         if st.variant_collision == "stack":
@@ -1044,19 +1105,36 @@ class GeneCartoon:
                 size *= 1.0 + frac * (st.variant_max_scale - 1.0)
             return size
 
-        # ---- stacked: no stems, markers directly above their position ---- #
-        if st.variant_style == "stacked":
+        # ---- no stems: markers directly above their position ---- #
+        if st.variant_style in ("stacked", "lanes"):
+            lanes = st.variant_style == "lanes"
+            # in lanes mode each lane is nudged up by the lanes below it
+            lane_of: Dict[int, int] = {}
+            if lanes:
+                for i, (_, base, n_sub) in enumerate(self._lane_rows):
+                    for k in range(n_sub):
+                        lane_of[base + k] = i
+
+            def y_of(tier: int) -> float:
+                extra = lane_of.get(tier, 0) * st.lane_gap if lanes else 0.0
+                return (y_base + st.variant_base_gap
+                        + tier * st.variant_stack_gap + extra)
+
             top = y_base
-            for v, x, _, tier in layout:
-                y = y_base + st.variant_base_gap + tier * st.variant_stack_gap
+            for i, (v, x, _, tier) in enumerate(layout):
+                y = y_of(tier)
                 top = max(top, y)
                 if ax is None:
                     continue
-                ax.scatter([x], [y], s=head_area(v), marker=st.variant_marker,
-                           facecolor=self.variant_color(v),
-                           edgecolor=st.variant_head_edge,
-                           linewidth=st.variant_head_edge_width, zorder=6,
-                           clip_on=False)
+                sc = ax.scatter([x], [y], s=head_area(v),
+                                marker=st.variant_marker,
+                                facecolor=self.variant_color(v),
+                                edgecolor=st.variant_head_edge,
+                                linewidth=st.variant_head_edge_width, zorder=6,
+                                clip_on=False)
+                # id survives into the SVG, which is what makes the figure
+                # hoverable/clickable in the app without a second renderer
+                sc.set_gid(f"variant-{self._gid_of(v)}")
                 if label_this and v.label:
                     ax.text(x + st.variant_label_gap
                             + (math.sqrt(head_area(v)) / 72.0
@@ -1064,6 +1142,20 @@ class GeneCartoon:
                             y, str(v.label), ha="left", va="center",
                             fontsize=st.variant_label_size,
                             color=st.text_color, zorder=7)
+
+            if lanes and ax is not None:
+                for cat, base, n_sub in self._lane_rows:
+                    y_lo, y_hi = y_of(base), y_of(base + n_sub - 1)
+                    if st.lane_rule:
+                        ax.add_line(Line2D(
+                            [0.0, 1.0],
+                            [y_lo - st.variant_stack_gap * 0.55] * 2,
+                            color=st.lane_rule_color, linewidth=0.6, zorder=1))
+                    ax.text(-0.015, (y_lo + y_hi) / 2, cat,
+                            ha="right", va="center",
+                            fontsize=st.lane_label_size,
+                            color=self._variant_colors.get(cat, st.text_color),
+                            fontweight="bold", zorder=7)
             return top + st.variant_stack_gap * 0.6
 
         # every head sits on one baseline (or its tier, in stack mode)
@@ -1215,6 +1307,16 @@ class GeneCartoon:
         # unit conversions (see _rect); x spans a little past [0,1] for labels
         x_lo = -0.13 if st.transcript_label_side == "left" else -0.03
         x_hi = 1.03 if st.transcript_label_side == "left" else 1.13
+
+        # lane mode writes category names down the left edge; widen the margin
+        # so long ones ("Large structural change (>50 bp)") aren't cut off
+        if st.variant_style == "lanes" and self.variants:
+            longest = max((len(c) for c in self._variant_colors if c), default=0)
+            need_in = longest * st.lane_label_size * 0.60 / 72.0
+            for _ in range(3):                      # converges immediately
+                span = x_hi - x_lo
+                x_lo = min(-0.03,
+                           -(need_in / st.figure_width_in) * span - 0.03)
         self._x_per_in = (x_hi - x_lo) / st.figure_width_in
         self._y_per_in = 1.0 / st.row_height_in
 
@@ -1263,7 +1365,10 @@ class GeneCartoon:
             b = y_legend - 0.20
         else:
             y_legend = None
-        if self.variants and st.show_variant_legend and any(self._variant_colors):
+        # in lanes mode the row labels already name every category
+        if (self.variants and st.show_variant_legend
+                and st.variant_style != "lanes"
+                and any(self._variant_colors)):
             y_vlegend = b - 0.24
             _, vlines = self._variant_legend_layout()
             b = y_vlegend - 0.20 - (vlines - 1) * self.VLEGEND_LINE
