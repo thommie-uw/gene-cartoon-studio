@@ -677,15 +677,23 @@ class Style:
     annotation_label_size: float = 7.0
     annotation_default_color: str = "#E8A33D"
 
-    # ---- variant lollipops ----
-    variant_stem_color: str = "#9A9A9A"
-    variant_stem_width: float = 0.8
+    # ---- variants ----
+    #: "stacked"  -- markers sit directly above their position and pile up
+    #:              vertically, label alongside each marker.  No stems.
+    #: "lollipop" -- classic stems, with heads nudged sideways when crowded.
+    variant_style: str = "stacked"
+    variant_marker: str = "o"              # o | s | D | v | ^
     variant_head_size: float = 42.0        # area in pt^2 of a single-count head
     variant_head_edge: str = "#FFFFFF"
     variant_head_edge_width: float = 0.5
+    variant_base_gap: float = 0.20         # gap between gene and the first tier
+    variant_stack_gap: float = 0.22        # vertical gap between tiers
+    variant_label_gap: float = 0.004       # marker-to-label gap (axis fraction)
+    # lollipop mode only
+    variant_stem_color: str = "#9A9A9A"
+    variant_stem_width: float = 0.8
     variant_stem_height: float = 0.55      # rows between gene and the heads
     variant_collision: str = "spread"      # spread (nudge sideways) | stack
-    variant_stack_gap: float = 0.20        # stack mode: gap between tiers
     variant_scale_by_count: bool = True    # bigger head for recurrent variants
     variant_max_scale: float = 3.2         # cap on head area multiplier
     show_variant_labels: bool = True
@@ -925,6 +933,30 @@ class GeneCartoon:
 
         head_w = (math.sqrt(st.variant_head_size) / 72.0) * self._x_per_in * 1.25
 
+        if st.variant_style == "stacked":
+            # Markers stay on their true position and pile upwards.  A tier is
+            # reusable once its previous occupant's marker *and label* have
+            # ended, so distant variants share the bottom row.
+            show_lbl = (st.show_variant_labels
+                        and len(items) <= st.variant_label_max)
+            ends: List[float] = []
+            out = []
+            for v, x in items:
+                right = head_w / 2
+                if show_lbl and v.label:
+                    right += st.variant_label_gap + self._text_width(
+                        v.label, st.variant_label_size) + head_w * 0.25
+                lo = x - head_w / 2
+                tier = 0
+                while tier < len(ends) and ends[tier] > lo:
+                    tier += 1
+                if tier == len(ends):
+                    ends.append(x + right)
+                else:
+                    ends[tier] = x + right
+                out.append((v, x, x, tier))
+            return out
+
         if st.variant_collision == "stack":
             out, occupied = [], []
             for v, x in items:
@@ -979,6 +1011,35 @@ class GeneCartoon:
         label_this = (st.show_variant_labels
                       and len(layout) <= st.variant_label_max)
 
+        def head_area(v: Variant) -> float:
+            size = st.variant_head_size
+            if st.variant_scale_by_count and cmax > 1:
+                frac = (max(1, v.count) - 1) / (cmax - 1)
+                size *= 1.0 + frac * (st.variant_max_scale - 1.0)
+            return size
+
+        # ---- stacked: no stems, markers directly above their position ---- #
+        if st.variant_style == "stacked":
+            top = y_base
+            for v, x, _, tier in layout:
+                y = y_base + st.variant_base_gap + tier * st.variant_stack_gap
+                top = max(top, y)
+                if ax is None:
+                    continue
+                ax.scatter([x], [y], s=head_area(v), marker=st.variant_marker,
+                           facecolor=self.variant_color(v),
+                           edgecolor=st.variant_head_edge,
+                           linewidth=st.variant_head_edge_width, zorder=6,
+                           clip_on=False)
+                if label_this and v.label:
+                    ax.text(x + st.variant_label_gap
+                            + (math.sqrt(head_area(v)) / 72.0
+                               * self._x_per_in) / 2,
+                            y, str(v.label), ha="left", va="center",
+                            fontsize=st.variant_label_size,
+                            color=st.text_color, zorder=7)
+            return top + st.variant_stack_gap * 0.6
+
         # every head sits on one baseline (or its tier, in stack mode)
         y_head = y_base + st.variant_stem_height
         top = max(y_head + tier * st.variant_stack_gap
@@ -995,11 +1056,8 @@ class GeneCartoon:
                                    linewidth=st.variant_stem_width, zorder=4,
                                    solid_capstyle="round",
                                    solid_joinstyle="round"))
-                size = st.variant_head_size
-                if st.variant_scale_by_count and cmax > 1:
-                    frac = (max(1, v.count) - 1) / (cmax - 1)
-                    size *= 1.0 + frac * (st.variant_max_scale - 1.0)
-                ax.scatter([hx], [y], s=size, facecolor=self.variant_color(v),
+                ax.scatter([hx], [y], s=head_area(v), marker=st.variant_marker,
+                           facecolor=self.variant_color(v),
                            edgecolor=st.variant_head_edge,
                            linewidth=st.variant_head_edge_width, zorder=6,
                            clip_on=False)

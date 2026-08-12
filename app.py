@@ -271,22 +271,32 @@ def main() -> None:
             st.selectbox("Background", ["none", "white"], key="sty_background",
                          help="'none' = transparent.")
 
-        with st.expander("Variant lollipops"):
-            st.slider("Head size", 10.0, 200.0, key="sty_variant_head_size",
+        with st.expander("Variants"):
+            st.selectbox(
+                "Display", ["stacked", "lollipop"], key="sty_variant_style",
+                help="stacked = markers sit directly above their position and "
+                     "pile up, with no connecting lines. lollipop = classic "
+                     "stems.")
+            st.selectbox("Marker", ["o", "s", "D", "v", "^"],
+                         key="sty_variant_marker",
+                         format_func=lambda m: {"o": "circle", "s": "square",
+                                                "D": "diamond",
+                                                "v": "triangle down",
+                                                "^": "triangle up"}[m])
+            st.slider("Marker size", 10.0, 200.0, key="sty_variant_head_size",
                       value=42.0, step=2.0)
-            st.slider("Stem height", 0.2, 2.0, key="sty_variant_stem_height",
-                      value=0.55, step=0.05)
-            st.selectbox("When variants collide", ["spread", "stack"],
-                         key="sty_variant_collision",
-                         help="spread = nudge sideways with a bent stem.")
-            st.checkbox("Scale head by count", value=True,
+            st.slider("Gap above gene", 0.0, 1.5, key="sty_variant_base_gap",
+                      value=0.20, step=0.05)
+            st.slider("Gap between rows", 0.10, 0.80,
+                      key="sty_variant_stack_gap", value=0.22, step=0.02)
+            st.checkbox("Scale marker by count", value=True,
                         key="sty_variant_scale_by_count")
             st.checkbox("Show variant labels", value=True,
                         key="sty_show_variant_labels")
-            st.slider("Label angle", 0, 90, key="sty_variant_label_rotation",
-                      value=45, step=5)
             st.slider("Label size", 4.0, 14.0, key="sty_variant_label_size",
                       value=6.5, step=0.5)
+            st.slider("Stem height (lollipop only)", 0.2, 2.0,
+                      key="sty_variant_stem_height", value=0.55, step=0.05)
 
     style = style_from_state()
 
