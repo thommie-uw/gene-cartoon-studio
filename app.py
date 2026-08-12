@@ -33,6 +33,9 @@ try:
 except ImportError:                                    # pragma: no cover
     HAVE_TABLES = False
 
+#: this app needs at least this version of ucsc_gene_cartoon.py
+ENGINE_MIN = (1, 1, 0)
+
 ASSEMBLIES = ["hg38", "hg19", "mm39", "mm10", "rn7", "danRer11",
               "dm6", "ce11", "sacCer3", "galGal6", "susScr11", "bosTau9"]
 
@@ -151,9 +154,40 @@ def _isblank(v: Any) -> bool:
 #  App
 # --------------------------------------------------------------------------- #
 
+def check_engine_version() -> None:
+    """
+    Refuse to run against a stale ucsc_gene_cartoon.py.
+
+    Updating one file but not the other is easy to do when uploading through
+    the GitHub web interface, and the result is baffling: new controls appear
+    in the sidebar but silently do nothing, because the old Style dataclass
+    has no field for them. Better to say so plainly.
+    """
+    raw = getattr(ugc, "__version__", "0.0.0")
+    try:
+        got = tuple(int(p) for p in str(raw).split(".")[:3])
+    except ValueError:
+        got = (0, 0, 0)
+    if got >= ENGINE_MIN:
+        return
+
+    want = ".".join(str(p) for p in ENGINE_MIN)
+    st.error(
+        f"**`ucsc_gene_cartoon.py` is out of date** — this app needs "
+        f"version {want} or newer, but found {raw}.\n\n"
+        "The two files have to be updated together. In your GitHub "
+        "repository, open `ucsc_gene_cartoon.py`, click the pencil icon, "
+        "replace the contents with the current version, and commit. The app "
+        "will rebuild itself within a minute.\n\n"
+        "Until then, some sidebar controls will appear but have no effect."
+    )
+    st.stop()
+
+
 def main() -> None:
     st.set_page_config(page_title="Gene Cartoon Studio",
                        page_icon="🧬", layout="wide")
+    check_engine_version()
     st.title("Gene Cartoon Studio")
     st.caption("Publication-ready gene diagrams from live UCSC Genome Browser "
                "data. Type a gene, adjust, download.")
