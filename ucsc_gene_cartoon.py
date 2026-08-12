@@ -27,7 +27,7 @@ from __future__ import annotations
 #: Bumped whenever app.py relies on something new in here.  app.py checks it
 #: and refuses to run against a stale copy, because a half-updated pair of
 #: files fails silently and confusingly (controls appear but do nothing).
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 
 import argparse
 import bisect
@@ -525,10 +525,23 @@ class CDNAMapper:
         """
         p = position if isinstance(position, CDNAPosition) else parse_hgvs(position)
         n = self.cdna_to_tx(p)
-        if not 1 <= n <= self.tx_length:
+        if n < 1:
+            # e.g. c.-219 when the annotated 5'UTR is only 171 nt: a promoter
+            # position, upstream of where this transcript is annotated to start
+            utr5 = self.n_cds_start - 1
             raise CDNAError(
-                f"{p} is outside {self.tx.name} "
-                f"(transcript is {self.tx_length} nt, c.1 at n.{self.n_cds_start})"
+                f"{p} lies {1 - n} nt upstream of the start of "
+                f"{self.tx.name}, which has only {utr5} nt of 5'UTR "
+                "annotated. Promoter positions like this fall outside the "
+                "transcript, so there is nowhere on the gene model to draw "
+                "them. A transcript with a longer annotated 5' end would "
+                "place it."
+            )
+        if n > self.tx_length:
+            raise CDNAError(
+                f"{p} is past the 3' end of {self.tx.name} "
+                f"(the transcript is {self.tx_length} nt, and c.1 sits at "
+                f"n.{self.n_cds_start})"
             )
         g = self.tx_to_genomic(n)
         if g is None:                                    # pragma: no cover
@@ -903,13 +916,21 @@ class GeneCartoon:
     # -- variants ---------------------------------------------------------- #
 
     def _assign_variant_colors(self) -> Dict[str, str]:
-        """One colour per category, in order of first appearance."""
+        """
+        One colour per category, in order of first appearance.
+
+        An explicit ``Variant.color`` wins, so a colour chosen in the GUI (or
+        set in the spreadsheet) also drives the legend -- otherwise the key
+        and the markers would disagree.
+        """
         pal = self.st.variant_palette or [self.st.variant_default_color]
         out: Dict[str, str] = {}
         for v in self.variants:
             cat = v.category or ""
             if cat not in out:
-                out[cat] = pal[len(out) % len(pal)]
+                out[cat] = v.color or pal[len(out) % len(pal)]
+            elif v.color and out[cat] != v.color:
+                out[cat] = v.color
         return out
 
     def variant_color(self, v: Variant) -> str:
@@ -1091,21 +1112,40 @@ class GeneCartoon:
         return y_label + (text_h * rise if st.variant_label_rotation
                           else st.variant_label_size / 72.0 * self._y_per_in)
 
-    def _draw_variant_legend(self, ax, y: float) -> None:
+    #: vertical step between wrapped legend rows, in row units
+    VLEGEND_LINE = 0.22
+
+    def _variant_legend_layout(self) -> Tuple[List[Tuple[str, float, int]], int]:
+        """Place category keys, wrapping onto extra rows when they overrun."""
         st = self.st
         cats = [c for c in self._variant_colors if c]
         if not cats:
-            return
+            return [], 0
         gap = self._text_width("nn", st.legend_size)
-        x = 0.0
+        items: List[Tuple[str, float, int]] = []
+        x, line = 0.0, 0
         for cat in cats:
-            ax.scatter([x], [y], s=st.variant_head_size,
+            w = gap * 0.5 + self._text_width(cat, st.legend_size) + gap
+            if x > 0.0 and x + w > 1.0:
+                line += 1
+                x = 0.0
+            items.append((cat, x, line))
+            x += w
+        return items, line + 1
+
+    def _draw_variant_legend(self, ax, y: float) -> None:
+        st = self.st
+        items, _ = self._variant_legend_layout()
+        gap = self._text_width("nn", st.legend_size)
+        for cat, x, line in items:
+            yy = y - line * self.VLEGEND_LINE
+            ax.scatter([x], [yy], s=st.variant_head_size,
+                       marker=st.variant_marker,
                        facecolor=self._variant_colors[cat],
                        edgecolor=st.variant_head_edge,
                        linewidth=st.variant_head_edge_width, clip_on=False)
-            ax.text(x + gap * 0.5, y, cat, ha="left", va="center",
+            ax.text(x + gap * 0.5, yy, cat, ha="left", va="center",
                     fontsize=st.legend_size, color="#444444")
-            x += gap * 0.5 + self._text_width(cat, st.legend_size) + gap
 
     def _chevron(self, ax, x: float, ycen: float, pointing_right: bool):
         s = self.st.chevron_size
@@ -1225,7 +1265,8 @@ class GeneCartoon:
             y_legend = None
         if self.variants and st.show_variant_legend and any(self._variant_colors):
             y_vlegend = b - 0.24
-            b = y_vlegend - 0.20
+            _, vlines = self._variant_legend_layout()
+            b = y_vlegend - 0.20 - (vlines - 1) * self.VLEGEND_LINE
         else:
             y_vlegend = None
         y_min = b - 0.08

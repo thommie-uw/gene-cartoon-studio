@@ -16,6 +16,7 @@ import io
 import json
 import traceback
 from dataclasses import asdict, fields
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import streamlit as st
@@ -34,7 +35,7 @@ except ImportError:                                    # pragma: no cover
     HAVE_TABLES = False
 
 #: this app needs at least this version of ucsc_gene_cartoon.py
-ENGINE_MIN = (1, 1, 0)
+ENGINE_MIN = (1, 2, 0)
 
 ASSEMBLIES = ["hg38", "hg19", "mm39", "mm10", "rn7", "danRer11",
               "dm6", "ce11", "sacCer3", "galGal6", "susScr11", "bosTau9"]
@@ -163,24 +164,67 @@ def check_engine_version() -> None:
     in the sidebar but silently do nothing, because the old Style dataclass
     has no field for them. Better to say so plainly.
     """
-    raw = getattr(ugc, "__version__", "0.0.0")
+    raw = getattr(ugc, "__version__", None)
     try:
         got = tuple(int(p) for p in str(raw).split(".")[:3])
-    except ValueError:
+    except (ValueError, AttributeError):
         got = (0, 0, 0)
     if got >= ENGINE_MIN:
         return
 
     want = ".".join(str(p) for p in ENGINE_MIN)
+    loaded_from = getattr(ugc, "__file__", "unknown location")
+    app_dir = str(Path(__file__).resolve().parent)
+    same_folder = str(Path(loaded_from).resolve().parent) == app_dir
+
     st.error(
-        f"**`ucsc_gene_cartoon.py` is out of date** — this app needs "
-        f"version {want} or newer, but found {raw}.\n\n"
-        "The two files have to be updated together. In your GitHub "
-        "repository, open `ucsc_gene_cartoon.py`, click the pencil icon, "
-        "replace the contents with the current version, and commit. The app "
-        "will rebuild itself within a minute.\n\n"
-        "Until then, some sidebar controls will appear but have no effect."
+        f"**`ucsc_gene_cartoon.py` is out of date.** This app needs version "
+        f"{want} or newer, but the copy it loaded reports "
+        f"`{raw if raw else 'no version at all'}`."
     )
+    st.markdown(
+        f"""
+**Python loaded this file:**
+
+```
+{loaded_from}
+```
+
+**app.py is in this folder:**
+
+```
+{app_dir}
+```
+"""
+    )
+    if not same_folder:
+        st.warning(
+            "Those are different folders — so there are **two copies** of "
+            "`ucsc_gene_cartoon.py` and the wrong one is winning. Delete the "
+            "one that isn't next to `app.py`."
+        )
+    else:
+        st.markdown(
+            """
+Both are in the same folder, so the file simply hasn't been replaced yet.
+**Check it directly on GitHub:** open `ucsc_gene_cartoon.py` in your
+repository and look at about line 30. The current version has:
+
+```python
+__version__ = "1.2.0"
+```
+
+If that line isn't there, the upload didn't land. Common reasons:
+
+- the files went into a **subfolder** instead of the top level of the repo
+- the commit went to a **different branch** than the one Streamlit deploys
+- **Commit changes** at the bottom of the upload page was never clicked
+
+Re-upload via **Add file → Upload files**, drop the file at the top level,
+and commit. Then, if it still shows old, click **Manage app** at the bottom
+right of this page and choose **Reboot app** to force a clean rebuild.
+"""
+        )
     st.stop()
 
 
@@ -480,6 +524,70 @@ def main() -> None:
         )
 
 
+def category_controls(placed: List[Variant],
+                      column: Optional[str]) -> List[Variant]:
+    """
+    Per-category show/hide and colour.
+
+    Returns only the variants the user has left switched on, with an explicit
+    colour stamped on each so both the markers and the legend use it.
+    """
+    cats: List[str] = []
+    for v in placed:
+        c = v.category or "(no category)"
+        if c not in cats:
+            cats.append(c)
+    if not cats:
+        return placed
+    cats.sort(key=lambda c: (-sum(1 for v in placed
+                                  if (v.category or "(no category)") == c), c))
+
+    palette = Style().variant_palette
+    label = column or "category"
+    st.markdown(f"**Show / colour by `{label}`** — untick to hide a group.")
+
+    c1, c2, _ = st.columns([1, 1, 3])
+    with c1:
+        if st.button("Select all", use_container_width=True):
+            for c in cats:
+                st.session_state[f"cat_on_{c}"] = True
+    with c2:
+        if st.button("Select none", use_container_width=True):
+            for c in cats:
+                st.session_state[f"cat_on_{c}"] = False
+
+    chosen: Dict[str, str] = {}
+    for i, cat in enumerate(cats):
+        n = sum(1 for v in placed if (v.category or "(no category)") == cat)
+        row = st.columns([0.5, 4, 1.2])
+        with row[0]:
+            on = st.checkbox(" ", value=True, key=f"cat_on_{cat}",
+                             label_visibility="collapsed")
+        with row[1]:
+            st.markdown(f"{cat} &nbsp;<span style='color:#888'>({n})</span>",
+                        unsafe_allow_html=True)
+        with row[2]:
+            colour = st.color_picker(
+                " ", value=palette[i % len(palette)], key=f"cat_col_{cat}",
+                label_visibility="collapsed")
+        if on:
+            chosen[cat] = colour
+
+    kept = []
+    for v in placed:
+        cat = v.category or "(no category)"
+        if cat in chosen:
+            v.color = chosen[cat]
+            kept.append(v)
+
+    hidden = len(placed) - len(kept)
+    if hidden:
+        st.caption(f"{hidden} variant(s) hidden by the filter above.")
+    if not kept:
+        st.warning("Every group is hidden, so no variants will be drawn.")
+    return kept
+
+
 def _variant_panel(upload, transcript: Transcript):
     """Column mapping + placement report. Returns (placed, failed)."""
     sheets = varmod.excel_sheet_names(upload)
@@ -528,14 +636,18 @@ def _variant_panel(upload, transcript: Transcript):
     st.success(f"Placed {len(placed)} of {len(vf.variants)} variant(s) on "
                f"{transcript.name}.")
 
+    all_placed = list(placed)
+    placed = category_controls(placed, mapping.get("category"))
+    shown = {id(v) for v in placed}
+
     mapper = CDNAMapper(transcript)
     report = []
-    for v in placed:
+    for v in all_placed:
         report.append({"label": v.label, "cDNA": v.cdna,
                        f"{transcript.chrom} (1-based)": v.genomic,
                        "exon": v.exon, "codon": v.protein,
                        "category": v.category, "count": v.count,
-                       "status": "placed"})
+                       "status": "shown" if id(v) in shown else "hidden"})
     for v in failed:
         report.append({"label": v.label, "cDNA": v.cdna,
                        f"{transcript.chrom} (1-based)": None,
