@@ -27,7 +27,7 @@ from __future__ import annotations
 #: Bumped whenever app.py relies on something new in here.  app.py checks it
 #: and refuses to run against a stale copy, because a half-updated pair of
 #: files fails silently and confusingly (controls appear but do nothing).
-__version__ = "1.3.0"
+__version__ = "1.5.0"
 
 import argparse
 import bisect
@@ -336,6 +336,34 @@ class Transcript:
     def exon_number(self, index: int) -> int:
         """Biological exon number (5'->3'), 1-based."""
         return index + 1 if self.strand == "+" else len(self.exons) - index
+
+    def exon_span(self, number: int) -> Optional[Tuple[int, int]]:
+        """Genomic span of a biological exon number, or None if out of range."""
+        if not 1 <= number <= len(self.exons):
+            return None
+        idx = number - 1 if self.strand == "+" else len(self.exons) - number
+        return self.exons[idx]
+
+    def exon_window(self, first: int, last: Optional[int] = None,
+                    flank: int = 0) -> Tuple[int, int]:
+        """
+        Genomic window covering exon(s), plus optional flanking intron.
+
+        Numbers are biological, so ``exon_window(14)`` means exon 14 as a
+        reader would count it, on either strand.
+        """
+        last = first if last is None else last
+        lo, hi = min(first, last), max(first, last)
+        spans = [self.exon_span(n) for n in range(lo, hi + 1)]
+        spans = [s for s in spans if s]
+        if not spans:
+            raise ValueError(
+                f"{self.name} has exons 1-{len(self.exons)}; "
+                f"asked for {first}" + (f"-{last}" if last != first else "")
+            )
+        g0 = min(s for s, _ in spans) - max(0, flank)
+        g1 = max(e for _, e in spans) + max(0, flank)
+        return max(self.tx_start - flank, g0), min(self.tx_end + flank, g1)
 
     def segments(self) -> List[Tuple[int, int, str]]:
         """Split exons into ('utr5' | 'cds' | 'utr3') pieces."""
@@ -711,7 +739,11 @@ class Style:
     variant_head_edge: str = "#FFFFFF"
     variant_head_edge_width: float = 0.5
     variant_base_gap: float = 0.20         # gap between gene and the first tier
-    variant_stack_gap: float = 0.22        # vertical gap between tiers
+    #: 0 = derive the row pitch from the marker size (recommended: shrinking
+    #: the markers then genuinely shortens the figure).  Set > 0 to pin it.
+    variant_stack_gap: float = 0.0
+    variant_row_spacing: float = 1.30      # row pitch, in marker diameters
+    variant_pack: float = 1.25             # horizontal clearance, in diameters
     variant_label_gap: float = 0.004       # marker-to-label gap (axis fraction)
     # lollipop mode only
     variant_stem_color: str = "#9A9A9A"
@@ -766,11 +798,16 @@ class CoordinateMapper:
     """
 
     def __init__(self, transcripts: Sequence[Transcript], style: Style,
-                 flip: bool = False):
+                 flip: bool = False,
+                 bounds: Optional[Tuple[int, int]] = None):
         self.style = style
         self.flip = flip
-        self.g_start = min(t.tx_start for t in transcripts)
-        self.g_end = max(t.tx_end for t in transcripts)
+        if bounds:
+            self.g_start, self.g_end = bounds
+        else:
+            self.g_start = min(t.tx_start for t in transcripts)
+            self.g_end = max(t.tx_end for t in transcripts)
+        self.bounded = bounds is not None
         self.mode = style.intron_mode
         self.blocks: List[Tuple[int, int, float, float, bool]] = []  # gs,ge,xs,xe,is_exon
         self._starts: List[int] = []
@@ -786,7 +823,13 @@ class CoordinateMapper:
                 merged[-1][1] = max(merged[-1][1], e)
             else:
                 merged.append([s, e])
-        return [(s, e) for s, e in merged]
+        # a focused view only lays out what falls inside the window
+        out = []
+        for s, e in merged:
+            s, e = max(s, self.g_start), min(e, self.g_end)
+            if s < e:
+                out.append((s, e))
+        return out
 
     def _build(self, transcripts: Sequence[Transcript]) -> None:
         total = self.g_end - self.g_start
@@ -855,6 +898,15 @@ class CoordinateMapper:
         a, b = self.x(start), self.x(end)
         return (a, b) if a <= b else (b, a)
 
+    def visible(self, start: int, end: int) -> bool:
+        """True if a feature overlaps the drawn window at all."""
+        return end > self.g_start and start < self.g_end
+
+    def clip(self, start: int, end: int) -> Optional[Tuple[int, int]]:
+        """Trim a feature to the window, or None if it falls outside."""
+        s, e = max(start, self.g_start), min(end, self.g_end)
+        return (s, e) if s < e else None
+
     @property
     def gap_blocks(self) -> List[Tuple[int, int]]:
         return [(b[0], b[1]) for b in self.blocks if not b[4]]
@@ -869,24 +921,37 @@ class GeneCartoon:
                  gene: str, genome: str, track: str,
                  annotations: Optional[List[Dict[str, Any]]] = None,
                  links: Optional[Dict[str, str]] = None,
-                 variants: Optional[Sequence[Variant]] = None):
+                 variants: Optional[Sequence[Variant]] = None,
+                 focus: Optional[Tuple[int, int]] = None,
+                 focus_label: str = ""):
         if not transcripts:
             raise ValueError("no transcripts to draw")
         self.tx = list(transcripts)
+        self.focus = focus
+        self.focus_label = focus_label
         self.st = style
         self.gene = gene
         self.genome = genome
         self.track = track
         self.annotations = annotations or []
         self.links = links or {}
-        self.variants = [v for v in (variants or []) if v.placed]
+        all_v = [v for v in (variants or []) if v.placed]
+        if focus:
+            g0, g1 = focus
+            self.variants = [v for v in all_v if g0 < v.genomic <= g1]
+            self.offscreen_variants = [v for v in all_v
+                                       if not (g0 < v.genomic <= g1)]
+        else:
+            self.variants = all_v
+            self.offscreen_variants = []
         self._variant_colors: Dict[str, str] = self._assign_variant_colors()
         self._lane_rows: List[Tuple[str, int, int]] = []
         self._gids: Dict[int, int] = {id(v): i
                                       for i, v in enumerate(self.variants)}
         self.strand = self.tx[0].strand
         self.flip = style.orient_five_prime_left and self.strand == "-"
-        self.map = CoordinateMapper(self.tx, style, flip=self.flip)
+        self.map = CoordinateMapper(self.tx, style, flip=self.flip,
+                                    bounds=focus)
 
     # -- helpers ----------------------------------------------------------- #
 
@@ -945,6 +1010,27 @@ class GeneCartoon:
     def _gid_of(self, v: Variant) -> int:
         return self._gids.get(id(v), 0)
 
+    def _marker_diameter(self) -> float:
+        """Widest marker, in points (scatter sizes are areas, hence sqrt)."""
+        size = self.st.variant_head_size
+        if self.st.variant_scale_by_count and self.variants:
+            cmax = max(max(1, v.count) for v in self.variants)
+            if cmax > 1:
+                size *= self.st.variant_max_scale
+        return math.sqrt(max(size, 1.0))
+
+    def _stack_gap(self) -> float:
+        """
+        Vertical pitch between stacked rows, in row units.
+
+        Tied to the marker diameter by default, so turning the markers down
+        actually shortens the figure instead of leaving holes between them.
+        """
+        if self.st.variant_stack_gap > 0:
+            return self.st.variant_stack_gap
+        d_in = self._marker_diameter() / 72.0
+        return d_in * self._y_per_in * self.st.variant_row_spacing
+
     def variant_tooltips(self) -> List[Dict[str, Any]]:
         """
         One record per drawn variant, keyed by the SVG element id.
@@ -994,7 +1080,7 @@ class GeneCartoon:
         if not items:
             return []
 
-        head_w = (math.sqrt(st.variant_head_size) / 72.0) * self._x_per_in * 1.25
+        head_w = (self._marker_diameter() / 72.0) * self._x_per_in * st.variant_pack
 
         show_lbl = (st.show_variant_labels
                     and len(items) <= st.variant_label_max)
@@ -1094,6 +1180,7 @@ class GeneCartoon:
         if not layout:
             return y_base
 
+        gap = self._stack_gap()
         cmax = max(max(1, v.count) for v, _, _, _ in layout)
         label_this = (st.show_variant_labels
                       and len(layout) <= st.variant_label_max)
@@ -1118,7 +1205,7 @@ class GeneCartoon:
             def y_of(tier: int) -> float:
                 extra = lane_of.get(tier, 0) * st.lane_gap if lanes else 0.0
                 return (y_base + st.variant_base_gap
-                        + tier * st.variant_stack_gap + extra)
+                        + tier * gap + extra)
 
             top = y_base
             for i, (v, x, _, tier) in enumerate(layout):
@@ -1149,23 +1236,23 @@ class GeneCartoon:
                     if st.lane_rule:
                         ax.add_line(Line2D(
                             [0.0, 1.0],
-                            [y_lo - st.variant_stack_gap * 0.55] * 2,
+                            [y_lo - gap * 0.55] * 2,
                             color=st.lane_rule_color, linewidth=0.6, zorder=1))
                     ax.text(-0.015, (y_lo + y_hi) / 2, cat,
                             ha="right", va="center",
                             fontsize=st.lane_label_size,
                             color=self._variant_colors.get(cat, st.text_color),
                             fontweight="bold", zorder=7)
-            return top + st.variant_stack_gap * 0.6
+            return top + gap * 0.6
 
         # every head sits on one baseline (or its tier, in stack mode)
         y_head = y_base + st.variant_stem_height
-        top = max(y_head + tier * st.variant_stack_gap
+        top = max(y_head + tier * gap
                   for _, _, _, tier in layout)
 
         if ax is not None:
             for v, anchor, hx, tier in layout:
-                y = y_head + tier * st.variant_stack_gap
+                y = y_head + tier * gap
                 # bend the stem where the head had to be nudged sideways
                 knee = y_base + st.variant_stem_height * 0.45
                 ax.add_line(Line2D([anchor, anchor, hx, hx],
@@ -1409,10 +1496,15 @@ class GeneCartoon:
                     color=st.text_color, url=self.links.get("browser"))
         if st.show_subtitle:
             t0 = self.tx[0]
-            g0 = min(t.tx_start for t in self.tx)
-            g1 = max(t.tx_end for t in self.tx)
+            if self.focus:
+                g0, g1 = self.focus
+            else:
+                g0 = min(t.tx_start for t in self.tx)
+                g1 = max(t.tx_end for t in self.tx)
             sub = (f"{self.genome}  {t0.chrom}:{g0 + 1:,}–{g1:,}  "
                    f"({self.strand} strand, {g1 - g0:,} bp)  ·  {self.track}")
+            if self.focus_label:
+                sub = f"{self.focus_label}  ·  " + sub
             ax.text(0.5, y_sub, sub, ha="center", va="bottom",
                     fontsize=st.subtitle_size, color="#666666",
                     url=self.links.get("sequence"))
@@ -1467,16 +1559,23 @@ class GeneCartoon:
         # introns
         pointing_right = (t.strand == "+") != self.flip
         for gs, ge in t.introns:
-            x0, x1 = self.map.span(gs, ge)
-            self._draw_intron(ax, x0, x1, y, pointing_right)
+            piece = self.map.clip(gs, ge)
+            if piece:
+                self._draw_intron(ax, *self.map.span(*piece), y,
+                                  pointing_right)
         if not t.introns:
-            x0, x1 = self.map.span(t.tx_start, t.tx_end)
-            self._draw_intron(ax, x0, x1, y, pointing_right)
+            piece = self.map.clip(t.tx_start, t.tx_end)
+            if piece:
+                self._draw_intron(ax, *self.map.span(*piece), y,
+                                  pointing_right)
         self._draw_break_marks(ax, t, y)
 
         # exon segments
         for gs, ge, kind in t.segments():
-            x0, x1 = self.map.span(gs, ge)
+            piece = self.map.clip(gs, ge)
+            if not piece:
+                continue
+            x0, x1 = self.map.span(*piece)
             if kind == "cds":
                 h, fc, ec = st.cds_height, st.cds_color, st.cds_edge
             elif kind == "nc":
@@ -1493,7 +1592,10 @@ class GeneCartoon:
             last_x = -1e9
             tier = 0
             for idx, (gs, ge) in enumerate(t.exons):
-                x0, x1 = self.map.span(gs, ge)
+                piece = self.map.clip(gs, ge)
+                if not piece:
+                    continue
+                x0, x1 = self.map.span(*piece)
                 xm = (x0 + x1) / 2
                 num = t.exon_number(idx)
                 if inside:
@@ -1574,7 +1676,10 @@ class GeneCartoon:
             start, end = int(a["start"]), int(a.get("end", a["start"]))
             if a.get("coords", "genomic") == "browser":  # 1-based inclusive
                 start -= 1
-            x0, x1 = self.map.span(start, max(end, start + 1))
+            end = max(end, start + 1)
+            if not self.map.visible(start, end):
+                continue
+            x0, x1 = self.map.span(*self.map.clip(start, end))
             kind = a.get("style", "box")
             if kind == "marker":
                 xm = (x0 + x1) / 2
@@ -1848,6 +1953,7 @@ def draw_gene(gene: Optional[str] = None, genome: str = "hg38",
               style: Optional[Any] = None,
               annotations: Optional[List[Dict[str, Any]]] = None,
               variants: Optional[Sequence[Variant]] = None,
+              exon: Optional[Any] = None, flank: int = 200,
               quiet: bool = True, **style_kwargs: Any) -> GeneFigure:
     """
     One-liner for notebooks and scripts.
@@ -1911,12 +2017,44 @@ def draw_gene(gene: Optional[str] = None, genome: str = "hg38",
     if variants:
         placed, failed = place_variants(list(variants), drawn[0])
 
+    bounds, focus_label = resolve_focus(drawn[0], exon, flank)
     cartoon = GeneCartoon(drawn, st, label, genome, used,
                           annotations=annotations, links=links,
-                          variants=placed)
+                          variants=placed, focus=bounds,
+                          focus_label=focus_label)
     fig = GeneFigure(cartoon, drawn, links, used, client)
     fig.variants, fig.failed_variants = placed, failed
     return fig
+
+
+def resolve_focus(tx: Transcript, exon: Optional[Any] = None,
+                  flank: int = 200) -> Tuple[Optional[Tuple[int, int]], str]:
+    """
+    Work out a focus window from an exon spec.
+
+    ``exon`` may be a number (``14``), a string range (``"14-16"``), a
+    ``(first, last)`` pair, or None for the whole gene.  Returns
+    ``(bounds, label)`` ready for :class:`GeneCartoon`.
+    """
+    if exon is None or exon == "" or str(exon).lower() in ("all", "whole gene"):
+        return None, ""
+
+    if isinstance(exon, (tuple, list)) and len(exon) == 2:
+        first, last = int(exon[0]), int(exon[1])
+    else:
+        s = str(exon).strip().lower().replace("exon", "").strip()
+        m = re.match(r"^(\d+)\s*[-–:]\s*(\d+)$", s)
+        if m:
+            first, last = int(m.group(1)), int(m.group(2))
+        else:
+            if not s.isdigit():
+                raise ValueError(
+                    f"cannot read {exon!r} as an exon; use e.g. 14 or 14-16")
+            first = last = int(s)
+
+    bounds = tx.exon_window(first, last, flank=flank)
+    label = f"exon {first}" if first == last else f"exons {first}–{last}"
+    return bounds, label
 
 
 def load_annotations(path: Optional[str]) -> List[Dict[str, Any]]:
@@ -1985,6 +2123,12 @@ def build_parser() -> argparse.ArgumentParser:
                      help="which isoforms to draw (default: longest-coding)")
     src.add_argument("--transcript", action="append", dest="transcript_ids",
                      help="draw a specific transcript by accession; repeatable")
+    src.add_argument("--exon", default=None, metavar="N|A-B",
+                     help="zoom in on one exon (--exon 14) or a run of them "
+                          "(--exon 14-16); numbers are biological, 5'->3'")
+    src.add_argument("--flank", type=int, default=200, metavar="BP",
+                     help="intron shown either side of a focused exon "
+                          "(default: 200 bp)")
     src.add_argument("--no-cache", action="store_true",
                      help="bypass the local API response cache")
     src.add_argument("--cache-dir", default=None)
@@ -2147,10 +2291,15 @@ def main(argv: Optional[List[str]] = None) -> int:
 
         # ---- draw ---- #
         style = apply_overrides(Style.load(args.style), args)
+        bounds, focus_label = resolve_focus(drawn[0], args.exon, args.flank)
+        if bounds and not args.quiet:
+            print(f"  focus  : {focus_label} "
+                  f"({chrom}:{bounds[0] + 1:,}-{bounds[1]:,})", file=sys.stderr)
         outs = args.out or [f"{gene_label}_{args.genome}.svg"]
         GeneCartoon(drawn, style, gene_label, args.genome, used_track,
                     annotations=load_annotations(args.annotations),
-                    links=links).render(outs)
+                    links=links, focus=bounds,
+                    focus_label=focus_label).render(outs)
 
     except (UCSCError, ValueError, OSError, json.JSONDecodeError) as e:
         print(f"error: {e}", file=sys.stderr)

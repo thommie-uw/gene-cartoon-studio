@@ -37,10 +37,23 @@ except ImportError:                                    # pragma: no cover
     HAVE_TABLES = False
 
 #: this app needs at least this version of ucsc_gene_cartoon.py
-ENGINE_MIN = (1, 3, 0)
+ENGINE_MIN = (1, 5, 0)
 
 ASSEMBLIES = ["hg38", "hg19", "mm39", "mm10", "rn7", "danRer11",
               "dm6", "ce11", "sacCer3", "galGal6", "susScr11", "bosTau9"]
+
+#: one-click density settings. Neither hides a variant -- they only change
+#: how much room each one is given.
+COMPACT_PRESET = {
+    "variant_head_size": 14.0, "variant_row_spacing": 1.05,
+    "variant_pack": 1.0, "variant_base_gap": 0.12, "lane_gap": 0.06,
+    "row_height_in": 0.65, "variant_label_size": 5.5,
+}
+ROOMY_PRESET = {
+    "variant_head_size": 42.0, "variant_row_spacing": 1.30,
+    "variant_pack": 1.25, "variant_base_gap": 0.20, "lane_gap": 0.16,
+    "row_height_in": 0.85, "variant_label_size": 6.5,
+}
 
 FORMATS = [("SVG (vector, editable)", "svg", "image/svg+xml"),
            ("PDF (vector)", "pdf", "application/pdf"),
@@ -348,7 +361,7 @@ Both are in the same folder, so the file simply hasn't been replaced yet.
 repository and look at about line 30. The current version has:
 
 ```python
-__version__ = "1.3.0"
+__version__ = "1.5.0"
 ```
 
 If that line isn't there, the upload didn't land. Common reasons:
@@ -438,6 +451,27 @@ def main() -> None:
         primary = drawn[0]
         st.caption(f"cDNA positions are mapped against **{primary.name}**.")
 
+        st.header("Focus")
+        n_ex = len(primary.exons)
+        scope = st.radio("Show", ["Whole gene", "Single exon", "Exon range"],
+                         horizontal=False, key="focus_scope")
+        exon_spec = None
+        if scope == "Single exon":
+            exon_spec = st.selectbox(
+                "Exon", list(range(1, n_ex + 1)), key="focus_exon",
+                format_func=lambda n: (
+                    f"exon {n}  ({primary.exon_span(n)[1] - primary.exon_span(n)[0]:,} bp)"))
+        elif scope == "Exon range":
+            lo, hi = st.select_slider(
+                "Exons", options=list(range(1, n_ex + 1)),
+                value=(1, min(3, n_ex)), key="focus_range")
+            exon_spec = (lo, hi)
+        flank = 200
+        if exon_spec is not None:
+            flank = st.slider("Flanking intron (bp)", 0, 5000, 200, 50,
+                              key="focus_flank",
+                              help="How much intron to show either side.")
+
     # ---------------- style controls ---------------- #
     with st.sidebar:
         st.header("Appearance")
@@ -487,6 +521,18 @@ def main() -> None:
                          help="'none' = transparent.")
 
         with st.expander("Variants"):
+            cc1, cc2 = st.columns(2)
+            with cc1:
+                if st.button("Compact", use_container_width=True,
+                             help="Small markers, tight rows — for large "
+                                  "cohorts. Nothing is hidden."):
+                    seed_state(COMPACT_PRESET)
+                    st.rerun()
+            with cc2:
+                if st.button("Roomy", use_container_width=True,
+                             help="Back to the spacious defaults."):
+                    seed_state(ROOMY_PRESET)
+                    st.rerun()
             st.selectbox(
                 "Display", ["stacked", "lanes", "lollipop"],
                 key="sty_variant_style",
@@ -503,12 +549,21 @@ def main() -> None:
                                                 "D": "diamond",
                                                 "v": "triangle down",
                                                 "^": "triangle up"}[m])
-            st.slider("Marker size", 10.0, 200.0, key="sty_variant_head_size",
-                      value=42.0, step=2.0)
+            st.slider("Marker size", 6.0, 200.0, key="sty_variant_head_size",
+                      value=42.0, step=2.0,
+                      help="Row spacing follows this, so turning it down "
+                           "genuinely shortens the figure.")
+            st.slider("Row spacing (× marker)", 0.8, 3.0,
+                      key="sty_variant_row_spacing", value=1.30, step=0.05,
+                      help="Vertical pitch between rows, as a multiple of the "
+                           "marker diameter. 1.0 = markers just touching.")
+            st.slider("Horizontal packing (× marker)", 0.5, 3.0,
+                      key="sty_variant_pack", value=1.25, step=0.05,
+                      help="How much clearance a marker claims sideways. "
+                           "Lower packs more per row, so fewer rows are "
+                           "needed; below 1.0 markers may touch.")
             st.slider("Gap above gene", 0.0, 1.5, key="sty_variant_base_gap",
                       value=0.20, step=0.05)
-            st.slider("Gap between rows", 0.10, 0.80,
-                      key="sty_variant_stack_gap", value=0.22, step=0.02)
             st.checkbox("Scale marker by count", value=True,
                         key="sty_variant_scale_by_count")
             st.checkbox("Show variant labels", value=True,
@@ -615,9 +670,18 @@ def main() -> None:
 
     # ---------------- render ---------------- #
     try:
+        bounds, focus_label = ugc.resolve_focus(primary, exon_spec, flank)
         cartoon = GeneCartoon(drawn, style, gene, genome, used_track,
                               annotations=annotations, links=links,
-                              variants=variant_objs)
+                              variants=variant_objs, focus=bounds,
+                              focus_label=focus_label)
+        if bounds:
+            n_off = len(cartoon.offscreen_variants)
+            st.info(
+                f"Showing **{focus_label}** of {primary.name} — "
+                f"{primary.chrom}:{bounds[0] + 1:,}–{bounds[1]:,}"
+                + (f". {len(cartoon.variants)} variant(s) here, "
+                   f"{n_off} elsewhere in the gene." if variant_objs else "."))
         if variant_objs:
             interactive = st.checkbox(
                 "Interactive figure — hover a variant for details, click to pin",
