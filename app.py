@@ -260,12 +260,37 @@ def style_from_state() -> Style:
     return st_obj
 
 
-def seed_state(preset: Dict[str, Any]) -> None:
-    """Push a style dict into the widget state (used by presets)."""
+#: where a queued preset waits between reruns
+PENDING_STYLE = "_pending_style"
+
+
+def queue_style(preset: Dict[str, Any]) -> None:
+    """
+    Ask for a preset to be applied on the next run.
+
+    Streamlit forbids writing to a widget's key once that widget has been
+    created in the current run, and the preset buttons necessarily sit below
+    the sliders they want to change. So stash the values under a plain key and
+    let :func:`apply_pending_style` install them at the top of the next run,
+    before any widget exists.
+    """
+    st.session_state[PENDING_STYLE] = dict(preset)
+
+
+def apply_pending_style() -> None:
+    """Install a queued preset. Must run before any widget is created."""
+    preset = st.session_state.pop(PENDING_STYLE, None)
+    if not preset:
+        return
     known = {f.name for f in fields(Style)}
     for k, v in preset.items():
         if k in known:
             st.session_state[f"sty_{k}"] = v
+
+
+def seed_state(preset: Dict[str, Any]) -> None:
+    """Backwards-compatible alias: queue a preset for the next run."""
+    queue_style(preset)
 
 
 def annotations_from_editor(df) -> List[Dict[str, Any]]:
@@ -361,7 +386,7 @@ Both are in the same folder, so the file simply hasn't been replaced yet.
 repository and look at about line 30. The current version has:
 
 ```python
-__version__ = "1.5.0"
+__version__ = "1.5.1"
 ```
 
 If that line isn't there, the upload didn't land. Common reasons:
@@ -382,6 +407,8 @@ def main() -> None:
     st.set_page_config(page_title="Gene Cartoon Studio",
                        page_icon="🧬", layout="wide")
     check_engine_version()
+    # before any widget is instantiated, or Streamlit refuses the assignment
+    apply_pending_style()
     st.title("Gene Cartoon Studio")
     st.caption("Publication-ready gene diagrams from live UCSC Genome Browser "
                "data. Type a gene, adjust, download.")
@@ -526,12 +553,12 @@ def main() -> None:
                 if st.button("Compact", use_container_width=True,
                              help="Small markers, tight rows — for large "
                                   "cohorts. Nothing is hidden."):
-                    seed_state(COMPACT_PRESET)
+                    queue_style(COMPACT_PRESET)
                     st.rerun()
             with cc2:
                 if st.button("Roomy", use_container_width=True,
                              help="Back to the spacious defaults."):
-                    seed_state(ROOMY_PRESET)
+                    queue_style(ROOMY_PRESET)
                     st.rerun()
             st.selectbox(
                 "Display", ["stacked", "lanes", "lollipop"],
@@ -662,11 +689,11 @@ def main() -> None:
                                       key="style_upload")
             if preset is not None and st.button("Apply loaded style"):
                 try:
-                    seed_state(json.load(preset))
-                    st.success("Style applied.")
-                    st.rerun()
+                    queue_style(json.load(preset))
                 except (json.JSONDecodeError, ValueError) as e:
                     st.error(f"Not a valid style file: {e}")
+                else:
+                    st.rerun()
 
     # ---------------- render ---------------- #
     try:
