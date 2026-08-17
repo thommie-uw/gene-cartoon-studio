@@ -37,7 +37,7 @@ except ImportError:                                    # pragma: no cover
     HAVE_TABLES = False
 
 #: this app needs at least this version of ucsc_gene_cartoon.py
-ENGINE_MIN = (1, 5, 0)
+ENGINE_MIN = (1, 6, 0)
 
 ASSEMBLIES = ["hg38", "hg19", "mm39", "mm10", "rn7", "danRer11",
               "dm6", "ce11", "sacCer3", "galGal6", "susScr11", "bosTau9"]
@@ -386,7 +386,7 @@ Both are in the same folder, so the file simply hasn't been replaced yet.
 repository and look at about line 30. The current version has:
 
 ```python
-__version__ = "1.5.1"
+__version__ = "1.6.0"
 ```
 
 If that line isn't there, the upload didn't land. Common reasons:

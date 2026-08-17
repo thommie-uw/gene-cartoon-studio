@@ -1,0 +1,393 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+  "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg xmlns:xlink="http://www.w3.org/1999/xlink" width="680.4pt" height="219.744pt" viewBox="0 0 680.4 219.744" xmlns="http://www.w3.org/2000/svg" version="1.1">
+ <metadata>
+  <rdf:RDF xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+   <cc:Work>
+    <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
+    <dc:date>2026-08-17T12:02:43.358079</dc:date>
+    <dc:format>image/svg+xml</dc:format>
+    <dc:creator>
+     <cc:Agent>
+      <dc:title>Matplotlib v3.10.9, https://matplotlib.org/</dc:title>
+     </cc:Agent>
+    </dc:creator>
+   </cc:Work>
+  </rdf:RDF>
+ </metadata>
+ <defs>
+  <style type="text/css">*{stroke-linejoin: round; stroke-linecap: butt}</style>
+ </defs>
+ <g id="figure_1">
+  <g id="patch_1">
+   <path d="M 0 219.744 
+L 680.4 219.744 
+L 680.4 0 
+L 0 0 
+L 0 219.744 
+z
+" style="fill: none; opacity: 0"/>
+  </g>
+  <g id="axes_1">
+   <g id="line2d_1">
+    <path d="M 456.504877 107.811 
+L 478.080346 107.811 
+" clip-path="url(#pc016586280)" style="fill: none; stroke: #4a4a4a; stroke-width: 1.2; stroke-linecap: square"/>
+   </g>
+   <g id="line2d_2">
+    <path d="M 419.612427 107.811 
+L 441.187897 107.811 
+" clip-path="url(#pc016586280)" style="fill: none; stroke: #4a4a4a; stroke-width: 1.2; stroke-linecap: square"/>
+   </g>
+   <g id="line2d_3">
+    <path d="M 387.443907 107.811 
+L 409.019376 107.811 
+" clip-path="url(#pc016586280)" style="fill: none; stroke: #4a4a4a; stroke-width: 1.2; stroke-linecap: square"/>
+   </g>
+   <g id="line2d_4">
+    <path d="M 346.256977 107.811 
+L 367.832446 107.811 
+" clip-path="url(#pc016586280)" style="fill: none; stroke: #4a4a4a; stroke-width: 1.2; stroke-linecap: square"/>
+   </g>
+   <g id="line2d_5">
+    <path d="M 308.93508 107.811 
+L 330.510549 107.811 
+" clip-path="url(#pc016586280)" style="fill: none; stroke: #4a4a4a; stroke-width: 1.2; stroke-linecap: square"/>
+   </g>
+   <g id="line2d_6">
+    <path d="M 271.183735 107.811 
+L 292.759204 107.811 
+" clip-path="url(#pc016586280)" style="fill: none; stroke: #4a4a4a; stroke-width: 1.2; stroke-linecap: square"/>
+   </g>
+   <g id="line2d_7">
+    <path d="M 223.268786 107.811 
+L 244.844255 107.811 
+" clip-path="url(#pc016586280)" style="fill: none; stroke: #4a4a4a; stroke-width: 1.2; stroke-linecap: square"/>
+   </g>
+   <g id="line2d_8">
+    <path d="M 161.754649 107.811 
+L 183.330119 107.811 
+" clip-path="url(#pc016586280)" style="fill: none; stroke: #4a4a4a; stroke-width: 1.2; stroke-linecap: square"/>
+   </g>
+   <g id="line2d_9">
+    <path d="M 137.029895 107.811 
+L 158.605364 107.811 
+" clip-path="url(#pc016586280)" style="fill: none; stroke: #4a4a4a; stroke-width: 1.2; stroke-linecap: square"/>
+   </g>
+   <g id="line2d_10">
+    <path d="M 100.853192 107.811 
+L 122.428661 107.811 
+" clip-path="url(#pc016586280)" style="fill: none; stroke: #4a4a4a; stroke-width: 1.2; stroke-linecap: square"/>
+   </g>
+   <g id="line2d_11">
+    <path d="M 84.534167 157.041 
+L 227.683512 157.041 
+" clip-path="url(#pc016586280)" style="fill: none; stroke: #333333; stroke-width: 1.6"/>
+   </g>
+   <g id="line2d_12">
+    <path d="M 84.534167 160.101 
+L 84.534167 153.981 
+" clip-path="url(#pc016586280)" style="fill: none; stroke: #333333; stroke-width: 1.6; stroke-linecap: square"/>
+   </g>
+   <g id="line2d_13">
+    <path d="M 227.683512 160.101 
+L 227.683512 153.981 
+" clip-path="url(#pc016586280)" style="fill: none; stroke: #333333; stroke-width: 1.6; stroke-linecap: square"/>
+   </g>
+   <g id="line2d_14">
+    <path d="M 167.552151 188.6895 
+L 182.511143 188.6895 
+" clip-path="url(#pc016586280)" style="fill: none; stroke: #4a4a4a; stroke-width: 1.2; stroke-linecap: square"/>
+   </g>
+   <g id="patch_2">
+    <a xlink:href="https://api.genome.ucsc.edu/getData/sequence?genome=hg38;chrom=chr17;start=7668420;end=7687490">
+     <path d="M 489.818592 114.543 
+L 659.880014 114.543 
+L 659.880014 101.079 
+L 489.818592 101.079 
+z
+" clip-path="url(#pc016586280)" style="fill: #bbd5e8; stroke: #123a5c; stroke-width: 0.8; stroke-linejoin: miter"/>
+    </a>
+   </g>
+   <g id="patch_3">
+    <a xlink:href="https://api.genome.ucsc.edu/getData/sequence?genome=hg38;chrom=chr17;start=7668420;end=7687490">
+     <path d="M 478.080346 120.663 
+L 489.818592 120.663 
+L 489.818592 94.959 
+L 478.080346 94.959 
+z
+" clip-path="url(#pc016586280)" style="fill: #2c6fa6; stroke: #123a5c; stroke-width: 0.8; stroke-linejoin: miter"/>
+    </a>
+   </g>
+   <g id="patch_4">
+    <a xlink:href="https://api.genome.ucsc.edu/getData/sequence?genome=hg38;chrom=chr17;start=7668420;end=7687490">
+     <path d="M 441.187897 120.663 
+L 456.504877 120.663 
+L 456.504877 94.959 
+L 441.187897 94.959 
+z
+" clip-path="url(#pc016586280)" style="fill: #2c6fa6; stroke: #123a5c; stroke-width: 0.8; stroke-linejoin: miter"/>
+    </a>
+   </g>
+   <g id="patch_5">
+    <a xlink:href="https://api.genome.ucsc.edu/getData/sequence?genome=hg38;chrom=chr17;start=7668420;end=7687490">
+     <path d="M 409.019376 120.663 
+L 419.612427 120.663 
+L 419.612427 94.959 
+L 409.019376 94.959 
+z
+" clip-path="url(#pc016586280)" style="fill: #2c6fa6; stroke: #123a5c; stroke-width: 0.8; stroke-linejoin: miter"/>
+    </a>
+   </g>
+   <g id="patch_6">
+    <a xlink:href="https://api.genome.ucsc.edu/getData/sequence?genome=hg38;chrom=chr17;start=7668420;end=7687490">
+     <path d="M 367.832446 120.663 
+L 387.443907 120.663 
+L 387.443907 94.959 
+L 367.832446 94.959 
+z
+" clip-path="url(#pc016586280)" style="fill: #2c6fa6; stroke: #123a5c; stroke-width: 0.8; stroke-linejoin: miter"/>
+    </a>
+   </g>
+   <g id="patch_7">
+    <a xlink:href="https://api.genome.ucsc.edu/getData/sequence?genome=hg38;chrom=chr17;start=7668420;end=7687490">
+     <path d="M 330.510549 120.663 
+L 346.256977 120.663 
+L 346.256977 94.959 
+L 330.510549 94.959 
+z
+" clip-path="url(#pc016586280)" style="fill: #2c6fa6; stroke: #123a5c; stroke-width: 0.8; stroke-linejoin: miter"/>
+    </a>
+   </g>
+   <g id="patch_8">
+    <a xlink:href="https://api.genome.ucsc.edu/getData/sequence?genome=hg38;chrom=chr17;start=7668420;end=7687490">
+     <path d="M 292.759204 120.663 
+L 308.93508 120.663 
+L 308.93508 94.959 
+L 292.759204 94.959 
+z
+" clip-path="url(#pc016586280)" style="fill: #2c6fa6; stroke: #123a5c; stroke-width: 0.8; stroke-linejoin: miter"/>
+    </a>
+   </g>
+   <g id="patch_9">
+    <a xlink:href="https://api.genome.ucsc.edu/getData/sequence?genome=hg38;chrom=chr17;start=7668420;end=7687490">
+     <path d="M 244.844255 120.663 
+L 271.183735 120.663 
+L 271.183735 94.959 
+L 244.844255 94.959 
+z
+" clip-path="url(#pc016586280)" style="fill: #2c6fa6; stroke: #123a5c; stroke-width: 0.8; stroke-linejoin: miter"/>
+    </a>
+   </g>
+   <g id="patch_10">
+    <a xlink:href="https://api.genome.ucsc.edu/getData/sequence?genome=hg38;chrom=chr17;start=7668420;end=7687490">
+     <path d="M 183.330119 120.663 
+L 223.268786 120.663 
+L 223.268786 94.959 
+L 183.330119 94.959 
+z
+" clip-path="url(#pc016586280)" style="fill: #2c6fa6; stroke: #123a5c; stroke-width: 0.8; stroke-linejoin: miter"/>
+    </a>
+   </g>
+   <g id="patch_11">
+    <a xlink:href="https://api.genome.ucsc.edu/getData/sequence?genome=hg38;chrom=chr17;start=7668420;end=7687490">
+     <path d="M 158.605364 120.663 
+L 161.754649 120.663 
+L 161.754649 94.959 
+L 158.605364 94.959 
+z
+" clip-path="url(#pc016586280)" style="fill: #2c6fa6; stroke: #123a5c; stroke-width: 0.8; stroke-linejoin: miter"/>
+    </a>
+   </g>
+   <g id="patch_12">
+    <a xlink:href="https://api.genome.ucsc.edu/getData/sequence?genome=hg38;chrom=chr17;start=7668420;end=7687490">
+     <path d="M 126.436843 120.663 
+L 137.029895 120.663 
+L 137.029895 94.959 
+L 126.436843 94.959 
+z
+" clip-path="url(#pc016586280)" style="fill: #2c6fa6; stroke: #123a5c; stroke-width: 0.8; stroke-linejoin: miter"/>
+    </a>
+   </g>
+   <g id="patch_13">
+    <a xlink:href="https://api.genome.ucsc.edu/getData/sequence?genome=hg38;chrom=chr17;start=7668420;end=7687490">
+     <path d="M 122.428661 114.543 
+L 126.436843 114.543 
+L 126.436843 101.079 
+L 122.428661 101.079 
+z
+" clip-path="url(#pc016586280)" style="fill: #bbd5e8; stroke: #123a5c; stroke-width: 0.8; stroke-linejoin: miter"/>
+    </a>
+   </g>
+   <g id="patch_14">
+    <a xlink:href="https://api.genome.ucsc.edu/getData/sequence?genome=hg38;chrom=chr17;start=7668420;end=7687490">
+     <path d="M 84.534167 114.543 
+L 100.853192 114.543 
+L 100.853192 101.079 
+L 84.534167 101.079 
+z
+" clip-path="url(#pc016586280)" style="fill: #bbd5e8; stroke: #123a5c; stroke-width: 0.8; stroke-linejoin: miter"/>
+    </a>
+   </g>
+   <g id="text_1">
+    <text style="font-size: 8px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #1a1a1a" x="75.903979" y="109.836625" transform="rotate(-0 75.903979 109.836625)">NM_000546.6</text>
+   </g>
+   <g id="text_2">
+    <a xlink:href="https://genome.ucsc.edu/cgi-bin/hgTracks?db=hg38&amp;position=chr17%3A7668421-7687490">
+     <text style="font-weight: 700; font-size: 12px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #1a1a1a" x="372.20709" y="34.800375" transform="rotate(-0 372.20709 34.800375)">TP53</text>
+    </a>
+   </g>
+   <g id="text_3">
+    <a xlink:href="https://api.genome.ucsc.edu/getData/sequence?genome=hg38;chrom=chr17;start=7668420;end=7687490">
+     <text style="font-size: 7.5px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #666666" x="372.20709" y="49.533234" transform="rotate(-0 372.20709 49.533234)">hg38  chr17:7,668,421–7,687,490  (- strand, 19,070 bp)  ·  ncbiRefSeqSelect</text>
+    </a>
+   </g>
+   <g id="patch_15">
+    <path d="M 84.534167 134.127 
+Q 372.20709 134.127 658.873783 134.127 
+" style="fill: none; stroke: #8a8a8a; stroke-width: 0.9; stroke-linecap: round"/>
+    <path d="M 655.273783 132.327 
+L 658.873783 134.127 
+L 655.273783 135.927 
+z
+" style="fill: #8a8a8a; stroke: #8a8a8a; stroke-width: 0.9; stroke-linecap: round"/>
+   </g>
+   <g id="text_4">
+    <text style="font-size: 7px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #8a8a8a" x="84.534167" y="129.305219" transform="rotate(-0 84.534167 129.305219)">5′</text>
+   </g>
+   <g id="text_5">
+    <text style="font-size: 7px; font-family: 'DejaVu Sans'; text-anchor: end; fill: #8a8a8a" x="659.880014" y="129.305219" transform="rotate(-0 659.880014 129.305219)">3′</text>
+   </g>
+   <g id="text_6">
+    <text style="font-size: 7px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #333333" x="156.108839" y="167.867906" transform="rotate(-0 156.108839 167.867906)">1 kb</text>
+   </g>
+   <g id="text_7">
+    <text style="font-style: italic; font-size: 6.3px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #999999" x="239.190429" y="158.779406" transform="rotate(-0 239.190429 158.779406)">(exon scale; introns not to scale)</text>
+   </g>
+   <g id="patch_16">
+    <path d="M 84.534167 198.3285 
+L 99.493159 198.3285 
+L 99.493159 179.0505 
+L 84.534167 179.0505 
+z
+" clip-path="url(#pc016586280)" style="fill: #2c6fa6; stroke: #123a5c; stroke-width: 0.8; stroke-linejoin: miter"/>
+   </g>
+   <g id="text_8">
+    <text style="font-size: 7.5px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #444444" x="103.543159" y="190.759031" transform="rotate(-0 103.543159 190.759031)">CDS</text>
+   </g>
+   <g id="patch_17">
+    <path d="M 126.043159 194.7483 
+L 141.002151 194.7483 
+L 141.002151 182.6307 
+L 126.043159 182.6307 
+z
+" clip-path="url(#pc016586280)" style="fill: #bbd5e8; stroke: #123a5c; stroke-width: 0.8; stroke-linejoin: miter"/>
+   </g>
+   <g id="text_9">
+    <text style="font-size: 7.5px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #444444" x="145.052151" y="190.759031" transform="rotate(-0 145.052151 190.759031)">UTR</text>
+   </g>
+   <g id="text_10">
+    <text style="font-size: 7.5px; font-family: 'DejaVu Sans'; text-anchor: start; fill: #444444" x="186.561143" y="190.759031" transform="rotate(-0 186.561143 190.759031)">intron</text>
+   </g>
+   <g id="line2d_15">
+    <path d="M 464.01314 116.55036 
+L 466.544662 99.07164 
+" clip-path="url(#pc016586280)" style="fill: none; stroke: #4a4a4a; stroke-width: 0.96; stroke-linecap: square"/>
+   </g>
+   <g id="line2d_16">
+    <path d="M 468.040561 116.55036 
+L 470.572083 99.07164 
+" clip-path="url(#pc016586280)" style="fill: none; stroke: #4a4a4a; stroke-width: 0.96; stroke-linecap: square"/>
+   </g>
+   <g id="line2d_17">
+    <path d="M 427.120691 116.55036 
+L 429.652213 99.07164 
+" clip-path="url(#pc016586280)" style="fill: none; stroke: #4a4a4a; stroke-width: 0.96; stroke-linecap: square"/>
+   </g>
+   <g id="line2d_18">
+    <path d="M 431.148112 116.55036 
+L 433.679633 99.07164 
+" clip-path="url(#pc016586280)" style="fill: none; stroke: #4a4a4a; stroke-width: 0.96; stroke-linecap: square"/>
+   </g>
+   <g id="line2d_19">
+    <path d="M 353.76524 116.55036 
+L 356.296762 99.07164 
+" clip-path="url(#pc016586280)" style="fill: none; stroke: #4a4a4a; stroke-width: 0.96; stroke-linecap: square"/>
+   </g>
+   <g id="line2d_20">
+    <path d="M 357.792661 116.55036 
+L 360.324183 99.07164 
+" clip-path="url(#pc016586280)" style="fill: none; stroke: #4a4a4a; stroke-width: 0.96; stroke-linecap: square"/>
+   </g>
+   <g id="line2d_21">
+    <path d="M 316.443343 116.55036 
+L 318.974865 99.07164 
+" clip-path="url(#pc016586280)" style="fill: none; stroke: #4a4a4a; stroke-width: 0.96; stroke-linecap: square"/>
+   </g>
+   <g id="line2d_22">
+    <path d="M 320.470764 116.55036 
+L 323.002286 99.07164 
+" clip-path="url(#pc016586280)" style="fill: none; stroke: #4a4a4a; stroke-width: 0.96; stroke-linecap: square"/>
+   </g>
+   <g id="line2d_23">
+    <path d="M 230.777049 116.55036 
+L 233.308571 99.07164 
+" clip-path="url(#pc016586280)" style="fill: none; stroke: #4a4a4a; stroke-width: 0.96; stroke-linecap: square"/>
+   </g>
+   <g id="line2d_24">
+    <path d="M 234.80447 116.55036 
+L 237.335992 99.07164 
+" clip-path="url(#pc016586280)" style="fill: none; stroke: #4a4a4a; stroke-width: 0.96; stroke-linecap: square"/>
+   </g>
+   <g id="line2d_25">
+    <path d="M 108.361455 116.55036 
+L 110.892977 99.07164 
+" clip-path="url(#pc016586280)" style="fill: none; stroke: #4a4a4a; stroke-width: 0.96; stroke-linecap: square"/>
+   </g>
+   <g id="line2d_26">
+    <path d="M 112.388876 116.55036 
+L 114.920398 99.07164 
+" clip-path="url(#pc016586280)" style="fill: none; stroke: #4a4a4a; stroke-width: 0.96; stroke-linecap: square"/>
+   </g>
+   <g id="text_11">
+    <text style="font-size: 6.5px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #1a1a1a" x="92.693679" y="88.099203" transform="rotate(-0 92.693679 88.099203)">1</text>
+   </g>
+   <g id="text_12">
+    <text style="font-size: 6.5px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #1a1a1a" x="129.729278" y="88.099203" transform="rotate(-0 129.729278 88.099203)">2</text>
+   </g>
+   <g id="text_13">
+    <text style="font-size: 6.5px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #1a1a1a" x="160.180007" y="88.099203" transform="rotate(-0 160.180007 88.099203)">3</text>
+   </g>
+   <g id="text_14">
+    <text style="font-size: 6.5px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #1a1a1a" x="203.299452" y="88.099203" transform="rotate(-0 203.299452 88.099203)">4</text>
+   </g>
+   <g id="text_15">
+    <text style="font-size: 6.5px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #1a1a1a" x="258.013995" y="88.099203" transform="rotate(-0 258.013995 88.099203)">5</text>
+   </g>
+   <g id="text_16">
+    <text style="font-size: 6.5px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #1a1a1a" x="300.847142" y="88.099203" transform="rotate(-0 300.847142 88.099203)">6</text>
+   </g>
+   <g id="text_17">
+    <text style="font-size: 6.5px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #1a1a1a" x="338.383763" y="88.099203" transform="rotate(-0 338.383763 88.099203)">7</text>
+   </g>
+   <g id="text_18">
+    <text style="font-size: 6.5px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #1a1a1a" x="377.638177" y="88.099203" transform="rotate(-0 377.638177 88.099203)">8</text>
+   </g>
+   <g id="text_19">
+    <text style="font-size: 6.5px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #1a1a1a" x="414.315902" y="88.099203" transform="rotate(-0 414.315902 88.099203)">9</text>
+   </g>
+   <g id="text_20">
+    <text style="font-size: 6.5px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #1a1a1a" x="448.846387" y="88.099203" transform="rotate(-0 448.846387 88.099203)">10</text>
+   </g>
+   <g id="text_21">
+    <text style="font-size: 6.5px; font-family: 'DejaVu Sans'; text-anchor: middle; fill: #1a1a1a" x="568.98018" y="88.099203" transform="rotate(-0 568.98018 88.099203)">11</text>
+   </g>
+  </g>
+ </g>
+ <defs>
+  <clipPath id="pc016586280">
+   <rect x="16.2" y="16.2" width="648" height="187.344"/>
+  </clipPath>
+ </defs>
+</svg>

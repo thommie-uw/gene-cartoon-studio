@@ -27,7 +27,7 @@ from __future__ import annotations
 #: Bumped whenever app.py relies on something new in here.  app.py checks it
 #: and refuses to run against a stale copy, because a half-updated pair of
 #: files fails silently and confusingly (controls appear but do nothing).
-__version__ = "1.5.1"
+__version__ = "1.6.0"
 
 import argparse
 import bisect
@@ -960,6 +960,8 @@ class GeneCartoon:
     # inches.  These two are set in render() once the axes limits are known.
     _x_per_in: float = 1.0     # axis x-units per inch
     _y_per_in: float = 1.0     # axis y-units per inch
+    #: how far in from the axis edge left/right labels are drawn
+    LABEL_DX: float = 0.015
 
     def _rect(self, ax, x0: float, x1: float, ycen: float, h: float,
               face: str, edge: str, url: Optional[str] = None, zorder: int = 3):
@@ -985,7 +987,18 @@ class GeneCartoon:
 
     def _text_width(self, text: str, size: float) -> float:
         """Rough width of a string in axis x-units."""
-        return len(str(text)) * size * 0.60 / 72.0 * self._x_per_in
+        return _text_width_in(text, size) * self._x_per_in
+
+    def _text_h(self, size_pt: float) -> float:
+        """
+        Height of one line of text, in row units.
+
+        Text is sized in points but the layout works in row units, and the two
+        are only related through row_height_in. Reserving fixed row units for
+        text is what used to break the figure when the font size or row height
+        was changed.
+        """
+        return (size_pt * 1.35 / 72.0) * self._y_per_in
 
     # -- variants ---------------------------------------------------------- #
 
@@ -1026,10 +1039,16 @@ class GeneCartoon:
         Tied to the marker diameter by default, so turning the markers down
         actually shortens the figure instead of leaving holes between them.
         """
-        if self.st.variant_stack_gap > 0:
-            return self.st.variant_stack_gap
+        st = self.st
+        if st.variant_stack_gap > 0:
+            return st.variant_stack_gap
         d_in = self._marker_diameter() / 72.0
-        return d_in * self._y_per_in * self.st.variant_row_spacing
+        gap = d_in * self._y_per_in * st.variant_row_spacing
+        if st.show_variant_labels and len(self.variants) <= st.variant_label_max:
+            # rows also have to clear the labels sitting beside each marker,
+            # or small markers stack their labels on top of one another
+            gap = max(gap, self._text_h(st.variant_label_size) * 1.30)
+        return gap
 
     def variant_tooltips(self) -> List[Dict[str, Any]]:
         """
@@ -1081,6 +1100,14 @@ class GeneCartoon:
             return []
 
         head_w = (self._marker_diameter() / 72.0) * self._x_per_in * st.variant_pack
+        if st.variant_style == "lollipop" and st.show_variant_labels \
+                and len(items) <= st.variant_label_max:
+            # lollipop labels share one baseline, so neighbouring heads must be
+            # far enough apart for the rotated text not to run into each other
+            rot = math.radians(st.variant_label_rotation or 90.0)
+            need = (self._text_h(st.variant_label_size) / max(self._y_per_in, 1e-9)
+                    ) * self._x_per_in / max(math.sin(rot), 0.2)
+            head_w = max(head_w, need * 1.30)
 
         show_lbl = (st.show_variant_labels
                     and len(items) <= st.variant_label_max)
@@ -1238,7 +1265,7 @@ class GeneCartoon:
                             [0.0, 1.0],
                             [y_lo - gap * 0.55] * 2,
                             color=st.lane_rule_color, linewidth=0.6, zorder=1))
-                    ax.text(-0.015, (y_lo + y_hi) / 2, cat,
+                    ax.text(-self.LABEL_DX, (y_lo + y_hi) / 2, cat,
                             ha="right", va="center",
                             fontsize=st.lane_label_size,
                             color=self._variant_colors.get(cat, st.text_color),
@@ -1389,29 +1416,65 @@ class GeneCartoon:
         })
 
         n = len(self.tx)
-        half = st.cds_height / 2
+        half = max(st.cds_height, st.utr_height, st.noncoding_height) / 2
 
-        # unit conversions (see _rect); x spans a little past [0,1] for labels
-        x_lo = -0.13 if st.transcript_label_side == "left" else -0.03
-        x_hi = 1.03 if st.transcript_label_side == "left" else 1.13
-
-        # lane mode writes category names down the left edge; widen the margin
-        # so long ones ("Large structural change (>50 bp)") aren't cut off
-        if st.variant_style == "lanes" and self.variants:
-            longest = max((len(c) for c in self._variant_colors if c), default=0)
-            need_in = longest * st.lane_label_size * 0.60 / 72.0
-            for _ in range(3):                      # converges immediately
-                span = x_hi - x_lo
-                x_lo = min(-0.03,
-                           -(need_in / st.figure_width_in) * span - 0.03)
-        self._x_per_in = (x_hi - x_lo) / st.figure_width_in
         self._y_per_in = 1.0 / st.row_height_in
+
+        # ---- left margin: must fit *every* label written down the left ---- #
+        left_labels: List[Tuple[str, float]] = []
+        if st.show_transcript_labels and st.transcript_label_side == "left":
+            left_labels += [(t.name, st.transcript_label_size) for t in self.tx]
+        if st.variant_style == "lanes" and self.variants:
+            left_labels += [(c, st.lane_label_size)
+                            for c in self._variant_colors if c]
+        need_in = max((_text_width_in(s, pt) for s, pt in left_labels),
+                      default=0.0)
+
+        right_in = 0.06
+        if st.show_transcript_labels and st.transcript_label_side == "right":
+            right_in = max(_text_width_in(t.name, st.transcript_label_size)
+                           for t in self.tx) + 0.06
+
+        # x spans [0,1] for the gene plus whatever the margins need. Solved
+        # iteratively because the axis span and the margin depend on each other.
+        x_lo, x_hi = -0.03, 1.03
+        for _ in range(5):
+            span = x_hi - x_lo
+            # labels start LABEL_DX in from the axis edge, so the margin has to
+            # cover the text *plus* that offset
+            x_lo = -((need_in / st.figure_width_in) * span
+                     + (self.LABEL_DX + 0.012 if need_in else 0.03))
+            x_hi = 1.0 + ((right_in / st.figure_width_in) * span
+                          + (self.LABEL_DX if right_in > 0.06 else 0.0))
+        self._x_per_in = (x_hi - x_lo) / st.figure_width_in
+
+        # ---- headings: shrink to fit rather than run off the page ---- #
+        t0 = self.tx[0]
+        if self.focus:
+            _g0, _g1 = self.focus
+        else:
+            _g0 = min(t.tx_start for t in self.tx)
+            _g1 = max(t.tx_end for t in self.tx)
+        subtitle = (f"{self.genome}  {t0.chrom}:{_g0 + 1:,}–{_g1:,}  "
+                    f"({self.strand} strand, {_g1 - _g0:,} bp)  ·  {self.track}")
+        if self.focus_label:
+            subtitle = f"{self.focus_label}  ·  " + subtitle
+
+        def fit(text: str, size: float) -> float:
+            avail = st.figure_width_in * 0.90
+            need = _text_width_in(text, size)
+            return size * avail / need if need > avail else size
+
+        title_size = fit(self.gene, st.title_size)
+        subtitle_size = fit(subtitle, st.subtitle_size)
 
         # ---------- vertical layout, all in "row units" ---------- #
         # Rows run from y = n-1 (top) down to y = 0 (bottom).
         num_above = st.show_exon_numbers and st.exon_number_position == "above"
         num_below = st.show_exon_numbers and st.exon_number_position == "below"
-        y = (n - 1) + half + (0.62 if num_above else 0.10)   # top of the models
+        # exon numbers may stagger onto a second tier, hence two text heights
+        num_band = 0.10 + 2 * self._text_h(st.exon_number_size) + 0.17
+        y = (n - 1) + half + (num_band if num_above else 0.10)
 
         # variant lollipops sit directly above the top transcript
         y_variants = y if self.variants else None
@@ -1433,23 +1496,29 @@ class GeneCartoon:
                     y = ann_y[r] + span - 0.12
 
         y_sub = y + 0.16
-        y_title = y_sub + (0.24 if st.show_subtitle else 0.0)
-        y_max = y_title + (0.34 if st.show_title else 0.05)
+        y_title = y_sub + (self._text_h(subtitle_size) + 0.06
+                           if st.show_subtitle else 0.0)
+        y_max = y_title + (self._text_h(title_size) + 0.08
+                           if st.show_title else 0.05)
 
-        b = -half - (0.42 if num_below else 0.06)             # bottom of models
+        b = -half - ((0.10 + self._text_h(st.exon_number_size) + 0.17)
+                     if num_below else 0.06)                  # bottom of models
         if st.show_strand_arrow:
-            y_arrow = b - 0.16
-            b = y_arrow - 0.22
+            y_arrow = b - 0.16 - (self._text_h(st.axis_size)
+                                  if num_below else 0.0)
+            b = y_arrow - self._text_h(st.axis_size) - 0.06
         else:
             y_arrow = None
         if st.axis_mode != "none":
             y_axis = b - 0.16
-            b = y_axis - (0.52 if self._axis_kind() == "coords" else 0.30)
+            # coords mode prints tick labels *and* the chromosome name
+            lines = 2 if self._axis_kind() == "coords" else 1
+            b = y_axis - 0.12 - lines * (self._text_h(st.axis_size) + 0.06)
         else:
             y_axis = None
         if st.show_legend:
-            y_legend = b - 0.22
-            b = y_legend - 0.20
+            y_legend = b - 0.10 - self._text_h(st.legend_size) / 2
+            b = y_legend - self._text_h(st.legend_size) / 2 - 0.08
         else:
             y_legend = None
         # in lanes mode the row labels already name every category
@@ -1492,21 +1561,11 @@ class GeneCartoon:
         # ---- title / subtitle ---- #
         if st.show_title:
             ax.text(0.5, y_title, self.gene, ha="center", va="bottom",
-                    fontsize=st.title_size, fontweight=st.title_weight,
+                    fontsize=title_size, fontweight=st.title_weight,
                     color=st.text_color, url=self.links.get("browser"))
         if st.show_subtitle:
-            t0 = self.tx[0]
-            if self.focus:
-                g0, g1 = self.focus
-            else:
-                g0 = min(t.tx_start for t in self.tx)
-                g1 = max(t.tx_end for t in self.tx)
-            sub = (f"{self.genome}  {t0.chrom}:{g0 + 1:,}–{g1:,}  "
-                   f"({self.strand} strand, {g1 - g0:,} bp)  ·  {self.track}")
-            if self.focus_label:
-                sub = f"{self.focus_label}  ·  " + sub
-            ax.text(0.5, y_sub, sub, ha="center", va="bottom",
-                    fontsize=st.subtitle_size, color="#666666",
+            ax.text(0.5, y_sub, subtitle, ha="center", va="bottom",
+                    fontsize=subtitle_size, color="#666666",
                     url=self.links.get("sequence"))
 
         if y_arrow is not None:
@@ -1587,28 +1646,41 @@ class GeneCartoon:
         # exon numbers
         if st.show_exon_numbers:
             inside = st.exon_number_position == "inside"
-            # Stagger labels that would otherwise collide on short exons.
-            min_gap = self._text_width("00", st.exon_number_size) * 1.5
-            last_x = -1e9
-            tier = 0
+            # Pack labels into as few tiers as will hold them, left to right.
+            # NB: iterate in *drawn* order, not genomic order. A minus-strand
+            # gene is flipped, so assuming ascending x mis-tiers every label.
+            entries = []
             for idx, (gs, ge) in enumerate(t.exons):
                 piece = self.map.clip(gs, ge)
                 if not piece:
                     continue
                 x0, x1 = self.map.span(*piece)
-                xm = (x0 + x1) / 2
-                num = t.exon_number(idx)
+                entries.append(((x0 + x1) / 2, t.exon_number(idx), x1 - x0))
+            entries.sort(key=lambda e: e[0])
+
+            ends: List[float] = []          # rightmost x used, per tier
+            for xm, num, box_w in entries:
                 if inside:
                     # a number can only sit inside a box wide enough to hold it
-                    if x1 - x0 < st.exon_number_min_width:
+                    if box_w < st.exon_number_min_width:
                         continue
                     ax.text(xm, y, str(num), ha="center", va="center",
                             fontsize=st.exon_number_size, color="white",
                             fontweight="bold", zorder=5)
                     continue
-                tier = tier + 1 if (xm - last_x) < min_gap else 0
-                tier = min(tier, 1)
-                last_x = xm
+
+                half_w = self._text_width(str(num), st.exon_number_size) / 2
+                lo, hi = xm - half_w - 0.003, xm + half_w + 0.003
+                tier = 0
+                while tier < len(ends) and ends[tier] > lo:
+                    tier += 1
+                if tier >= 2:               # two tiers is the readable limit;
+                    continue                # skipping beats overprinting
+                if tier == len(ends):
+                    ends.append(hi)
+                else:
+                    ends[tier] = hi
+
                 sign = -1 if st.exon_number_position == "below" else 1
                 dy = sign * (st.cds_height / 2 + 0.09 + tier * 0.17)
                 if tier:  # leader line from the label down to its exon
@@ -1626,10 +1698,10 @@ class GeneCartoon:
         if st.show_transcript_labels:
             label = t.name if len(self.tx) > 1 or t.name != self.gene else t.name
             if st.transcript_label_side == "left":
-                ax.text(-0.015, y, label, ha="right", va="center",
+                ax.text(-self.LABEL_DX, y, label, ha="right", va="center",
                         fontsize=st.transcript_label_size, color=st.text_color)
             else:
-                ax.text(1.015, y, label, ha="left", va="center",
+                ax.text(1.0 + self.LABEL_DX, y, label, ha="left", va="center",
                         fontsize=st.transcript_label_size, color=st.text_color)
 
     def _draw_strand_arrow(self, ax, y: float) -> None:
@@ -1721,13 +1793,24 @@ class GeneCartoon:
             g0, g1 = self.map.g_start, self.map.g_end
             ticks = _nice_ticks(g0, g1, 5)
             ax.add_line(Line2D([0, 1], [y, y], color="#555555", linewidth=0.8))
+            # In compressed mode the mapping is piecewise, so evenly spaced
+            # coordinates land unevenly on the axis. Draw every tick mark, but
+            # only label the ones that have room -- otherwise they overprint.
+            placed: List[Tuple[float, float]] = []
             for tpos in ticks:
                 xt = self.map.x(tpos)
                 ax.add_line(Line2D([xt, xt], [y, y - 0.07],
                                    color="#555555", linewidth=0.8))
-                ax.text(xt, y - 0.11, f"{tpos:,}", ha="center", va="top",
+                label = f"{tpos:,}"
+                half_w = self._text_width(label, st.axis_size) / 2 + 0.004
+                if any(not (xt + half_w < lo or xt - half_w > hi)
+                       for lo, hi in placed):
+                    continue
+                placed.append((xt - half_w, xt + half_w))
+                ax.text(xt, y - 0.11, label, ha="center", va="top",
                         fontsize=st.axis_size, color="#555555")
-            ax.text(0.5, y - 0.34, self.tx[0].chrom, ha="center", va="top",
+            ax.text(0.5, y - 0.13 - self._text_h(st.axis_size),
+                    self.tx[0].chrom, ha="center", va="top",
                     fontsize=st.axis_size, color="#555555")
         else:
             bp = st.scalebar_bp or _nice_scalebar(self.map.bp_per_x)
@@ -1797,6 +1880,11 @@ def _nice_scalebar(bp_per_x: float) -> int:
         if m * mag >= target:
             return int(m * mag)
     return int(10 * mag)
+
+
+def _text_width_in(text: Any, size_pt: float) -> float:
+    """Rough width of a string in inches at a given point size."""
+    return len(str(text)) * size_pt * 0.60 / 72.0
 
 
 def _rounded_rect_pts(x: float, y: float, w: float, h: float,
