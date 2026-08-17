@@ -37,7 +37,7 @@ except ImportError:                                    # pragma: no cover
     HAVE_TABLES = False
 
 #: this app needs at least this version of ucsc_gene_cartoon.py
-ENGINE_MIN = (1, 6, 0)
+ENGINE_MIN = (1, 7, 0)
 
 ASSEMBLIES = ["hg38", "hg19", "mm39", "mm10", "rn7", "danRer11",
               "dm6", "ce11", "sacCer3", "galGal6", "susScr11", "bosTau9"]
@@ -425,7 +425,7 @@ Both are in the same folder, so the file simply hasn't been replaced yet.
 repository and look at about line 30. The current version has:
 
 ```python
-__version__ = "1.6.1"
+__version__ = "1.7.0"
 ```
 
 If that line isn't there, the upload didn't land. Common reasons:
@@ -609,6 +609,16 @@ def main() -> None:
             st.slider("Gap between lanes", 0.0, 0.8, key="sty_lane_gap",
                       value=0.16, step=0.02,
                       help="Only used by the 'lanes' display.")
+            st.selectbox(
+                "Name the categories with", ["labels", "legend"],
+                key="sty_lane_key",
+                format_func=lambda v: {"labels": "Row labels (left edge)",
+                                       "legend": "A legend instead"}[v],
+                help="'legend' drops the row labels and identifies lanes by "
+                     "colour, which frees up the left margin that long "
+                     "category names take. Lanes display only.")
+            st.checkbox("Box around the legend", value=False,
+                        key="sty_variant_legend_box")
             st.selectbox("Marker", ["o", "s", "D", "v", "^"],
                          key="sty_variant_marker",
                          format_func=lambda m: {"o": "circle", "s": "square",

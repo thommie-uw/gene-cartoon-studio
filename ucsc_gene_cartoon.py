@@ -27,7 +27,7 @@ from __future__ import annotations
 #: Bumped whenever app.py relies on something new in here.  app.py checks it
 #: and refuses to run against a stale copy, because a half-updated pair of
 #: files fails silently and confusingly (controls appear but do nothing).
-__version__ = "1.6.1"
+__version__ = "1.7.0"
 
 import argparse
 import bisect
@@ -734,6 +734,13 @@ class Style:
     lane_label_size: float = 7.5
     lane_rule: bool = True                 # faint baseline under each lane
     lane_rule_color: str = "#E4E4E4"
+    #: how lanes are named. "labels" writes the category down the left edge;
+    #: "legend" drops those and identifies the rows by colour in a key instead,
+    #: which frees up the left margin long category names would otherwise eat.
+    lane_key: str = "labels"               # labels | legend
+    variant_legend_box: bool = False       # draw a frame around the key
+    variant_legend_box_color: str = "#DDDDDD"
+    variant_legend_box_fill: str = "none"
     variant_marker: str = "o"              # o | s | D | v | ^
     variant_head_size: float = 42.0        # area in pt^2 of a single-count head
     variant_head_edge: str = "#FFFFFF"
@@ -1265,6 +1272,8 @@ class GeneCartoon:
                             [0.0, 1.0],
                             [y_lo - gap * 0.55] * 2,
                             color=st.lane_rule_color, linewidth=0.6, zorder=1))
+                    if st.lane_key != "labels":
+                        continue
                     ax.text(-self.LABEL_DX, (y_lo + y_hi) / 2, cat,
                             ha="right", va="center",
                             fontsize=st.lane_label_size,
@@ -1341,8 +1350,25 @@ class GeneCartoon:
 
     def _draw_variant_legend(self, ax, y: float) -> None:
         st = self.st
-        items, _ = self._variant_legend_layout()
+        items, lines = self._variant_legend_layout()
+        if not items:
+            return
         gap = self._text_width("nn", st.legend_size)
+
+        if st.variant_legend_box:
+            right = max(x + gap * 0.5 + self._text_width(c, st.legend_size)
+                        for c, x, _ in items)
+            pad_x, pad_y = gap * 0.35, self._text_h(st.legend_size) * 0.45
+            top = y + self._text_h(st.legend_size) / 2 + pad_y
+            bot = (y - (lines - 1) * self.VLEGEND_LINE
+                   - self._text_h(st.legend_size) / 2 - pad_y)
+            ax.add_patch(Rectangle(
+                (-pad_x, bot), right + 2 * pad_x, top - bot,
+                facecolor=("none" if st.variant_legend_box_fill == "none"
+                           else st.variant_legend_box_fill),
+                edgecolor=st.variant_legend_box_color,
+                linewidth=0.8, zorder=0, clip_on=False))
+
         for cat, x, line in items:
             yy = y - line * self.VLEGEND_LINE
             ax.scatter([x], [yy], s=st.variant_head_size,
@@ -1424,7 +1450,8 @@ class GeneCartoon:
         left_labels: List[Tuple[str, float]] = []
         if st.show_transcript_labels and st.transcript_label_side == "left":
             left_labels += [(t.name, st.transcript_label_size) for t in self.tx]
-        if st.variant_style == "lanes" and self.variants:
+        if (st.variant_style == "lanes" and self.variants
+                and st.lane_key == "labels"):
             left_labels += [(c, st.lane_label_size)
                             for c in self._variant_colors if c]
         need_in = max((_text_width_in(s, pt) for s, pt in left_labels),
@@ -1523,11 +1550,15 @@ class GeneCartoon:
             y_legend = None
         # in lanes mode the row labels already name every category
         if (self.variants and st.show_variant_legend
-                and st.variant_style != "lanes"
+                and not (st.variant_style == "lanes"
+                         and st.lane_key == "labels")
                 and any(self._variant_colors)):
-            y_vlegend = b - 0.24
             _, vlines = self._variant_legend_layout()
-            b = y_vlegend - 0.20 - (vlines - 1) * self.VLEGEND_LINE
+            box_pad = (self._text_h(st.legend_size) * 0.45
+                       if st.variant_legend_box else 0.0)
+            y_vlegend = b - 0.24 - box_pad
+            b = (y_vlegend - 0.20 - box_pad
+                 - (vlines - 1) * self.VLEGEND_LINE)
         else:
             y_vlegend = None
         y_min = b - 0.08
