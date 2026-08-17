@@ -262,6 +262,45 @@ def style_from_state() -> Style:
 
 #: where a queued preset waits between reruns
 PENDING_STYLE = "_pending_style"
+#: the uploaded spreadsheet, kept as raw bytes so it survives reruns
+UPLOAD_BYTES = "_variant_bytes"
+UPLOAD_NAME = "_variant_name"
+
+
+def remember_upload(upload) -> Optional[str]:
+    """
+    Keep an uploaded spreadsheet across reruns.
+
+    Two things would otherwise lose it: reading the stream leaves its pointer
+    at EOF, and pressing a button (Compact, Roomy, Apply style) triggers a
+    rerun that rebuilds the uploader widget. Stashing the raw bytes makes the
+    data independent of both.
+    """
+    if upload is not None:
+        try:
+            upload.seek(0)
+            data = upload.read()
+        except (AttributeError, OSError, ValueError):
+            data = getattr(upload, "getvalue", lambda: b"")()
+        if data:
+            st.session_state[UPLOAD_BYTES] = data
+            st.session_state[UPLOAD_NAME] = getattr(upload, "name", "variants.csv")
+    return st.session_state.get(UPLOAD_NAME)
+
+
+def stored_upload():
+    """A fresh, rewound handle on the remembered spreadsheet (or None)."""
+    data = st.session_state.get(UPLOAD_BYTES)
+    if not data:
+        return None
+    buf = io.BytesIO(data)
+    buf.name = st.session_state.get(UPLOAD_NAME, "variants.csv")
+    return buf
+
+
+def forget_upload() -> None:
+    st.session_state.pop(UPLOAD_BYTES, None)
+    st.session_state.pop(UPLOAD_NAME, None)
 
 
 def queue_style(preset: Dict[str, Any]) -> None:
@@ -386,7 +425,7 @@ Both are in the same folder, so the file simply hasn't been replaced yet.
 repository and look at about line 30. The current version has:
 
 ```python
-__version__ = "1.6.0"
+__version__ = "1.6.1"
 ```
 
 If that line isn't there, the upload didn't land. Common reasons:
@@ -621,8 +660,9 @@ def main() -> None:
                 "override them below.")
             c1, c2 = st.columns([3, 1])
             with c1:
-                up = st.file_uploader("Variant table",
-                                      type=["csv", "tsv", "txt", "xlsx", "xls"])
+                up = st.file_uploader(
+                    "Variant table", type=["csv", "tsv", "txt", "xlsx", "xls"],
+                    key="variant_upload")
             with c2:
                 st.download_button(
                     "Example file", data=_template_bytes(),
@@ -631,8 +671,18 @@ def main() -> None:
                          "spreadsheetml.sheet",
                     help="A filled-in example showing the expected columns.")
 
-            if up is not None:
-                variant_objs, failed = _variant_panel(up, primary)
+            name = remember_upload(up)
+            handle = stored_upload()
+            if handle is not None:
+                if up is None:
+                    r1, r2 = st.columns([3, 1])
+                    with r1:
+                        st.caption(f"Using **{name}** (kept from earlier).")
+                    with r2:
+                        if st.button("Remove file", use_container_width=True):
+                            forget_upload()
+                            st.rerun()
+                variant_objs, failed = _variant_panel(handle, primary)
 
     # -- annotations -- #
     with tab_annot:

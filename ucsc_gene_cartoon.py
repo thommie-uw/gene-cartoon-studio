@@ -27,7 +27,7 @@ from __future__ import annotations
 #: Bumped whenever app.py relies on something new in here.  app.py checks it
 #: and refuses to run against a stale copy, because a half-updated pair of
 #: files fails silently and confusingly (controls appear but do nothing).
-__version__ = "1.6.0"
+__version__ = "1.6.1"
 
 import argparse
 import bisect

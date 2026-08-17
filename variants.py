@@ -47,9 +47,13 @@ COLUMN_HINTS: Dict[str, List[str]] = {
         "proteinvariant", "id", "variantid",
     ],
     "category": [
-        "category", "class", "classification", "clinicalsignificance",
-        "significance", "clinsig", "consequence", "effect", "type",
-        "varianttype", "group", "impact", "acmg", "pathogenicity",
+        "mutationtype", "varianttype", "category", "class", "classification",
+        "clinicalsignificance", "significance", "clinsig", "consequence",
+        "effect", "type", "group", "impact", "acmg", "pathogenicity",
+        "mutationclass", "variantclass", "molecularconsequence",
+    ],
+    "domain": [
+        "domain", "proteindomain", "region", "motif", "exon", "feature",
     ],
     "count": [
         "count", "n", "occurrences", "occurrence", "recurrence", "frequency",
@@ -71,8 +75,12 @@ _CDNA_LAST_RESORT = {"position", "variant", "mutation", "hgvs", "cpos"}
 FUZZY_HINTS: Dict[str, List[str]] = {
     "count": ["case", "sample", "patient", "count", "occur", "freq",
               "recurr", "observ", "tally", "tumour", "tumor"],
-    "category": ["signif", "classif", "consequence", "pathogen", "effect",
-                 "impact", "acmg", "categor"],
+    # NB: deliberately not a bare "mutation" -- that would steal the cDNA
+    # column from files whose position header is "Mutation CDS".
+    "category": ["mutationtype", "varianttype", "mutationclass", "signif",
+                 "classif", "consequence", "pathogen", "effect", "impact",
+                 "acmg", "categor"],
+    "domain": ["domain", "protdomain", "motif"],
     "label": ["protein", "aminoacid", "aachange", "mutationaa", "variantname",
               "label", "aacode"],
     "cdna": ["cdna", "hgvsc", "nucleotide", "cchange"],
@@ -202,11 +210,27 @@ class VariantFile:
                 + (f" [{used}]" if used else ""))
 
 
+def _rewind(source: Any) -> Any:
+    """
+    Put a file-like object back to the start.
+
+    Reading a stream leaves the pointer at EOF, so a second read returns
+    nothing. Uploaded files get read more than once (sheet names, then the
+    data, then again after any rerun), so always rewind first.
+    """
+    try:
+        source.seek(0)
+    except (AttributeError, OSError, ValueError):
+        pass
+    return source
+
+
 def read_table(source: Union[str, Path, io.IOBase], sheet: Optional[Any] = None
                ) -> "pd.DataFrame":
     """Read CSV/TSV/TXT/Excel into a DataFrame, sniffing the delimiter."""
     name = getattr(source, "name", None) or str(source)
     suffix = Path(str(name)).suffix.lower()
+    _rewind(source)
 
     if suffix in (".xlsx", ".xlsm", ".xls", ".xltx"):
         try:
@@ -257,9 +281,13 @@ def excel_sheet_names(source: Union[str, Path, io.IOBase]) -> List[str]:
     if Path(str(name)).suffix.lower() not in (".xlsx", ".xlsm", ".xls", ".xltx"):
         return []
     try:
-        return list(pd.ExcelFile(source).sheet_names)
+        _rewind(source)
+        names = list(pd.ExcelFile(source).sheet_names)
+        return names
     except Exception:  # pragma: no cover
         return []
+    finally:
+        _rewind(source)          # leave it ready for the caller to read
 
 
 def build_variants(df: "pd.DataFrame", columns: Dict[str, Optional[str]],
