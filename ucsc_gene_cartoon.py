@@ -27,7 +27,7 @@ from __future__ import annotations
 #: Bumped whenever app.py relies on something new in here.  app.py checks it
 #: and refuses to run against a stale copy, because a half-updated pair of
 #: files fails silently and confusingly (controls appear but do nothing).
-__version__ = "1.7.0"
+__version__ = "1.7.1"
 
 import argparse
 import bisect
@@ -1647,7 +1647,10 @@ class GeneCartoon:
         seq_url = self.links.get("sequence")
 
         # introns
+        # same rule as the 5'->3' arrow, so chevrons never disagree with it
         pointing_right = (t.strand == "+") != self.flip
+        if t.strand == self.strand:
+            pointing_right = self.reads_left_to_right
         for gs, ge in t.introns:
             piece = self.map.clip(gs, ge)
             if piece:
@@ -1735,15 +1738,29 @@ class GeneCartoon:
                 ax.text(1.0 + self.LABEL_DX, y, label, ha="left", va="center",
                         fontsize=st.transcript_label_size, color=st.text_color)
 
+    @property
+    def reads_left_to_right(self) -> bool:
+        """
+        True when transcription runs left-to-right as drawn.
+
+        A minus-strand gene is normally flipped so it reads 5'->3'. Turn that
+        off and the picture is in genomic order instead, which puts the 5' end
+        on the *right* -- so the arrow has to turn round with it.
+        """
+        return (self.strand == "+") != self.flip
+
     def _draw_strand_arrow(self, ax, y: float) -> None:
         st = self.st
-        x0, x1 = (0.0, 1.0)
-        ax.annotate("", xy=(x1, y), xytext=(x0, y),
+        tail, head = (0.0, 1.0) if self.reads_left_to_right else (1.0, 0.0)
+        ax.annotate("", xy=(head, y), xytext=(tail, y),
                     arrowprops=dict(arrowstyle="-|>", color="#8A8A8A",
                                     linewidth=0.9, shrinkA=0, shrinkB=0))
-        ax.text(x0, y + 0.055, "5′", ha="left", va="bottom",
+        # 5' sits at the tail, 3' at the arrowhead, whichever way round it runs
+        ax.text(tail, y + 0.055, "5′",
+                ha="left" if tail == 0.0 else "right", va="bottom",
                 fontsize=st.axis_size, color="#8A8A8A")
-        ax.text(x1, y + 0.055, "3′", ha="right", va="bottom",
+        ax.text(head, y + 0.055, "3′",
+                ha="left" if head == 0.0 else "right", va="bottom",
                 fontsize=st.axis_size, color="#8A8A8A")
 
     def _annotation_tiers(self, items: Sequence[Dict[str, Any]]) -> Dict[int, int]:

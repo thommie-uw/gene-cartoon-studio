@@ -425,7 +425,7 @@ Both are in the same folder, so the file simply hasn't been replaced yet.
 repository and look at about line 30. The current version has:
 
 ```python
-__version__ = "1.7.0"
+__version__ = "1.7.1"
 ```
 
 If that line isn't there, the upload didn't land. Common reasons:
